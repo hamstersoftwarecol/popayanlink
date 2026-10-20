@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "drivelink",
+  "account_id": "0a752097fea8d3d143836ffcb796bdc1",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "drivelink",
+      "database_id": "c9408b90-6820-42a2-9ff9-9816dbb19225",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "dd8c5f828d4f438a8c409af335df9862" }
+  ],
+  "ratelimits": [
+    { "name": "PUBLIC_API_LIMITER", "namespace_id": "347960231", "simple": { "limit": 30, "period": 60 } }
+  ],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": { "DEMO_CATALOG": "true", "LOCAL_ADMIN": "false" }
+}

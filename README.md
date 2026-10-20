@@ -2,6 +2,12 @@
 
 Plataforma automotriz en español con Astro 7, React, Cloudflare Workers/D1 y caché KV opcional. Incluye catálogo, solicitudes de alquiler con o sin conductor, citas de taller, reservas de compra, pruebas de manejo, portal del cliente y panel administrativo.
 
+## Despliegue activo
+
+URL pública en la cuenta del propietario: https://drivelink.business-alejandrolopezmurillo.workers.dev
+
+Worker, D1 y KV publicados. Configuración y comandos: [DESPLIEGUE_CLOUDFLARE.md](./DESPLIEGUE_CLOUDFLARE.md). La copia de Sites conserva acceso privado y usa una D1 independiente.
+
 ## Estado de la entrega
 
 Es una base funcional desplegable, con datos persistentes y APIs verificadas. Sin credenciales, el panel muestra una **vista de ejemplo**, el catálogo es ilustrativo y las solicitudes de invitado se guardan como pendientes. No se simulan llamadas, mensajes enviados ni cobros. Las operaciones administrativas están bloqueadas por defecto.
@@ -34,7 +40,7 @@ Opcional: `npm run seed:local` carga seis vehículos y cuatro servicios ilustrat
 
 ## Verificación
 
-Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 14 pruebas y las cinco regresiones corregidas en la revisión adicional.
+Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 15 pruebas, las cinco regresiones corregidas y el límite de solicitudes del despliegue público.
 
 ```sh
 npm run check
@@ -127,24 +133,15 @@ Documentación: https://docs.stripe.com/api/checkout/sessions/create y https://d
 
 El binding D1 se llama `DB`. La caché KV opcional se llama `CACHE`; solo almacena configuración con TTL de 60 s, nunca disponibilidad ni datos de pago. La base D1 es la fuente de verdad y el sistema funciona sin KV.
 
-Para tu propia cuenta de Cloudflare:
+El despliegue de la cuenta del propietario ya está configurado en `wrangler.cloudflare.jsonc`, con los IDs reales de D1 y KV. `wrangler.jsonc` mantiene el marcador local para la vista previa. No cambiarlo para publicar.
 
 ```sh
-npx wrangler login
-npx wrangler d1 create drivelink
-npx wrangler kv namespace create CACHE
+npm run deploy:cloudflare
 ```
 
-Actualizar `database_id` en `wrangler.jsonc` y añadir `kv_namespaces` con el ID devuelto. Aplicar migraciones remotas:
+El comando compila, comprueba tipos y pruebas, aplica las migraciones remotas y publica. Para cargar las claves reales desde `.env.production` (ignorado por Git), usar `npm run secrets:cloudflare`. El procedimiento completo y la URL están en [DESPLIEGUE_CLOUDFLARE.md](./DESPLIEGUE_CLOUDFLARE.md).
 
-```sh
-npx wrangler d1 migrations apply drivelink --remote
-npx wrangler secret put CLERK_SECRET_KEY
-npx wrangler secret put VAPI_WEBHOOK_SECRET
-npm run deploy
-```
-
-Configurar los demás secretos con el mismo mecanismo; nunca guardarlos en Git. El ID D1 actual de Wrangler es un marcador para desarrollo local. El despliegue de Sites provisiona su propia D1 según `.openai/hosting.json` y aplica las migraciones del paquete. Sites no provisiona KV en esta entrega: KV se activa al añadir su binding en un despliegue Cloudflare propio.
+La instalación de Sites provisiona su propia D1 según `.openai/hosting.json` y aplica las migraciones del paquete; esa copia funciona sin KV. Las dos instalaciones tienen bases y variables independientes. Nunca guardar secretos en Git.
 
 ## Antes de operar públicamente
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { bookingInput, calculateQuote, validTransition } from './domain';
 import { sampleVehicles, sampleServices } from '../src/data';
 import assets from './assets.generated.json';
-type Env={DB:D1Database;CACHE?:KVNamespace;ASSETS?:Fetcher;[key:string]:any};
+type Env={DB:D1Database;CACHE?:KVNamespace;ASSETS?:Fetcher;PUBLIC_API_LIMITER?:RateLimit;[key:string]:any};
 class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 async function stableId(value:string){const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))).slice(0,16);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const h=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);}
@@ -87,6 +87,10 @@ async function webhook(req:Request,env:Env,path:string){
 }
 async function api(req:Request,env:Env){const url=new URL(req.url),path=url.pathname;
  if(req.method!=='GET'&&req.method!=='HEAD'&&!path.startsWith('/api/webhooks/')){const origin=req.headers.get('origin');if(origin&&origin!==url.origin&&origin!==env.APP_ORIGIN)throw new HttpError(403,'Origen no permitido.');}
+ if(env.PUBLIC_API_LIMITER&&req.method==='POST'&&['/api/bookings','/api/leads','/api/listings','/api/quote'].includes(path)){
+ const limited=await env.PUBLIC_API_LIMITER.limit({key:'public:'+String(req.headers.get('CF-Connecting-IP')||'unknown')});
+ if(!limited.success)throw new HttpError(429,'Has realizado demasiadas solicitudes. Inténtalo de nuevo en un minuto.');
+ }
  if(path.startsWith('/api/webhooks/'))return webhook(req,env,path);
  const user=await identity(req,env);
  if(path==='/api/session'&&req.method==='GET'){

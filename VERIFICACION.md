@@ -10,7 +10,7 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 
 - TypeScript: sin errores.
 - Compilación de Astro y Worker: correcta. Persiste una advertencia de optimización por un chunk de SDK superior a 500 KB; no impide la compilación.
-- Pruebas automatizadas: 14/14 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
+- Pruebas automatizadas: 15/15 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
 - Dependencias de producción: `npm audit --omit=dev`, cero vulnerabilidades detectadas.
 - Cloudflare Wrangler con D1 local: solicitudes de alquiler, taller y reserva de compra; cálculo de precio; persistencia; reintentos idempotentes; consulta de disponibilidad y cancelación. Todo correcto.
 - Pago manual simulado únicamente en un registro QA local: al cancelar queda `refund_required`. No hubo movimientos de dinero.
@@ -31,15 +31,16 @@ Cada corrección tiene una prueba de regresión que falló antes del cambio y pa
 
 ## Límites de esta verificación
 
-El usuario eligió continuar con pruebas locales. No se completó el inicio de sesión con ChatGPT en el despliegue privado ni una reserva autenticada de producción. Los datos de QA se crearon únicamente en D1 local y se cancelaron al terminar.
+En la revisión inicial, el usuario eligió pruebas locales y no se completó el inicio de sesión en la copia privada de Sites. Después autorizó publicar en su cuenta de Cloudflare. En ese despliegue público se comprobó una reserva de invitado, su aislamiento, disponibilidad e idempotencia contra D1 remota, y se canceló al terminar. No se probó una cuenta real de Clerk. Ver DESPLIEGUE_CLOUDFLARE.md para la comprobación remota.
 
-El entorno de producción consultado no tiene variables configuradas. Por tanto, no se verificaron con proveedores reales:
+El entorno de Sites consultado no tenía variables configuradas. El despliegue propio de Cloudflare ya tiene D1 y KV, pero todavía no contiene credenciales de proveedores. No se verificaron con proveedores reales:
 
 - Inicio de sesión y permisos con cuentas de Clerk.
 - Llamadas y agentes Vapi.
 - Envío o recepción reales de WhatsApp con Kapso.
 - Cobros y reembolsos en una pasarela de pago.
-- Binding de Cloudflare KV.
+
+KV sí quedó conectado y comprobado en el despliegue propio de Cloudflare; continúa sin binding en la copia de Sites.
 
 Las pruebas de webhooks verifican autenticación, firmas, importes e idempotencia usando eventos sintéticos. No equivalen a una validación de extremo a extremo con los proveedores.
 

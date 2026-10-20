@@ -1,1 +1,42 @@
-{"name":"drivelink","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"astro dev --host 0.0.0.0","build":"astro build && node scripts/build-worker.mjs","preview":"wrangler dev --port 4321","db:generate":"drizzle-kit generate","db:local":"wrangler d1 migrations apply drivelink --local","seed:local":"wrangler d1 execute drivelink --local --file=db/seed.sql","test":"node --test tests/*.test.mjs","check":"tsc --noEmit","deploy":"npm run build && wrangler deploy"},"dependencies":{"@astrojs/react":"^7.1.0","@clerk/backend":"^3.26.0","@clerk/clerk-js":"^6.40.0","@vapi-ai/web":"^3.0.0","astro":"^7.4.1","lucide-react":"^0.468.0","papaparse":"^5.5.0","react":"^19.2.0","react-dom":"^19.2.0","zod":"^4.0.0"},"devDependencies":{"@cloudflare/workers-types":"^5.20261019.1","@types/papaparse":"^5.3.16","@types/react":"^19.0.0","@types/react-dom":"^19.0.0","drizzle-kit":"^0.31.0","drizzle-orm":"^0.45.4","esbuild":"^0.25.0","typescript":"^5.9.0","wrangler":"^4.151.3"}}
+{
+  "name": "drivelink",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 0.0.0.0",
+    "build": "astro build && node scripts/build-worker.mjs",
+    "preview": "wrangler dev --port 4321",
+    "db:generate": "drizzle-kit generate",
+    "db:local": "wrangler d1 migrations apply drivelink --local",
+    "seed:local": "wrangler d1 execute drivelink --local --file=db/seed.sql",
+    "test": "node --test tests/*.test.mjs",
+    "check": "tsc --noEmit",
+    "deploy": "npm run deploy:cloudflare",
+    "deploy:cloudflare": "npm run build && npm run check && npm test && wrangler d1 migrations apply drivelink --remote --config wrangler.cloudflare.jsonc && wrangler deploy --config wrangler.cloudflare.jsonc",
+    "secrets:cloudflare": "node scripts/cloudflare-secrets.mjs"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.0",
+    "@clerk/backend": "^3.26.0",
+    "@clerk/clerk-js": "^6.40.0",
+    "@vapi-ai/web": "^3.0.0",
+    "astro": "^7.4.1",
+    "lucide-react": "^0.468.0",
+    "papaparse": "^5.5.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/papaparse": "^5.3.16",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.31.0",
+    "drizzle-orm": "^0.45.4",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.151.3"
+  }
+}
