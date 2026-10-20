@@ -1,8 +1,5 @@
 {
-  "d1": {
-    "binding": "DB",
-    "database_name": "drivelink"
-  },
+  "d1": "DB",
   "r2": null,
   "project_id": "appgprj_6ad7f442d490819191fcc57e4a08588f"
 }
