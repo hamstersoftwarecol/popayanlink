@@ -34,6 +34,8 @@ Opcional: `npm run seed:local` carga seis vehículos y cuatro servicios ilustrat
 
 ## Verificación
 
+Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 14 pruebas y las cinco regresiones corregidas en la revisión adicional.
+
 ```sh
 npm run check
 npm run build
