@@ -9,6 +9,7 @@ Publicado el 20 de octubre de 2026, en America/Bogota.
 | Recurso | Nombre / binding | Estado |
 | --- | --- | --- |
 | Cloudflare Worker | `drivelink` | Publicado en workers.dev |
+| Dominio adicional | `drivelink.agryvalores.com` | Conectado, HTTPS y API responden 200; la dirección principal elegida es workers.dev |
 | D1 | `drivelink` / `DB` | Dos migraciones aplicadas, siete tablas de aplicación |
 | KV | `DRIVELINK_CACHE` / `CACHE` | Conectado y comprobado por el servidor |
 | Límite de solicitudes | `PUBLIC_API_LIMITER` | 30 solicitudes por minuto por IP para presupuesto, reserva, leads y publicaciones |
@@ -45,7 +46,7 @@ El comando compila, comprueba tipos, ejecuta las pruebas, aplica migraciones pen
 
 ## Activar integraciones
 
-Faltan las claves de Clerk, Vapi, Kapso y la pasarela de pagos. No se generan ni se inventan credenciales. Para cargarlas sin guardarlas en Git:
+Clerk está conectado a la instancia de desarrollo por elección del propietario. Faltan las claves de Vapi, Kapso y la pasarela de pagos. No se generan ni se inventan credenciales. Para cargar credenciales nuevas sin guardarlas en Git:
 
 1. Copiar `.env.example` a `.env.production` (archivo ignorado).
 2. Completar solo las claves de producción de los proveedores.
@@ -66,4 +67,14 @@ Configurar estos webhooks en cada proveedor:
 
 Los secretos deben coincidir con los configurados en cada proveedor. Ver README.md para autenticación, firmas y eventos.
 
-Antes de recibir clientes reales, cargar inventario y políticas reales, desactivar `DEMO_CATALOG` y retirar los datos ilustrativos de forma controlada. No se ha configurado un dominio personalizado porque el propietario no indicó ninguno.
+Antes de recibir clientes reales, cargar inventario y políticas reales, desactivar `DEMO_CATALOG` y retirar los datos ilustrativos de forma controlada.
+
+## Configuración de Clerk
+
+El proyecto está vinculado a la aplicación existente `app_3KypTSJ2WEiICwSST43J8RO7mHA`. Las claves de desarrollo se restauraron mediante la CLI en archivos locales ignorados por Git. El cliente carga Clerk Core 3 con su interfaz separada y ofrece inicio de sesión, registro y menú de cuenta. La ventana de inicio de sesión se comprobó en localhost; no se ha creado una cuenta de prueba ni validado una sesión completa.
+
+No se ha creado una instancia de producción. El intento de clonar desarrollo fue rechazado por el plan debido a `app:phone_code` y `app:mfa_phone_code`. No se cambió esa configuración ni se contrató un plan.
+
+El propietario eligió finalmente mantener workers.dev como dirección principal y autorizó activar allí el acceso de prueba. Se enviaron únicamente las claves pública y secreta de la instancia de desarrollo mediante stdin a los secretos del Worker, sin mostrarlas ni guardarlas en Git. La interfaz identifica el acceso como prueba y las ventanas de Clerk se presentan en español. `ADMIN_USER_IDS` sigue sin asignarse: registrarse no concede permisos administrativos.
+
+Clerk exige un dominio propio con control DNS para el despliegue habitual de producción: https://clerk.com/docs/guides/development/deployment/production. La conexión actual de Clerk es de desarrollo y no equivale a activar producción. La verificación completa de inicio/cierre de sesión y del portal con una cuenta real requiere el registro del propietario.

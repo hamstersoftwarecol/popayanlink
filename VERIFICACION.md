@@ -15,6 +15,9 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 - Cloudflare Wrangler con D1 local: solicitudes de alquiler, taller y reserva de compra; cálculo de precio; persistencia; reintentos idempotentes; consulta de disponibilidad y cancelación. Todo correcto.
 - Pago manual simulado únicamente en un registro QA local: al cancelar queda `refund_required`. No hubo movimientos de dinero.
 - Navegador local: catálogo, taller, ventas, reservas, clientes, agentes, mensajes, finanzas, configuración, sitio web y portal cargan sin errores de conexión.
+- Clerk local: SDK e interfaz Core 3 cargan; la ventana real de inicio de sesión abre correctamente. Inicio de sesión, registro y menú de cuenta integrados; no se completó una sesión de usuario.
+- Clerk en workers.dev: `/api/session` confirma la instancia de desarrollo conectada; inicio de sesión y registro abren en español, con aviso visible de prueba. `/api/admin/overview` mantiene HTTP 403 para invitados. Falta el registro e inicio de sesión del propietario para verificar una sesión real.
+- Dominio adicional `drivelink.agryvalores.com`: HTTPS y `/api/session` responden 200. El propietario mantiene workers.dev como URL principal.
 - Hosting: sitio activo, acceso privado del propietario conservado.
 - D1 desplegada: binding `DB` y siete tablas de la aplicación presentes.
 - Logs de producción consultados, ventana de 180 minutos: sin eventos de error registrados. Esto no sustituye pruebas de tráfico real.
@@ -33,7 +36,7 @@ Cada corrección tiene una prueba de regresión que falló antes del cambio y pa
 
 En la revisión inicial, el usuario eligió pruebas locales y no se completó el inicio de sesión en la copia privada de Sites. Después autorizó publicar en su cuenta de Cloudflare. En ese despliegue público se comprobó una reserva de invitado, su aislamiento, disponibilidad e idempotencia contra D1 remota, y se canceló al terminar. No se probó una cuenta real de Clerk. Ver DESPLIEGUE_CLOUDFLARE.md para la comprobación remota.
 
-El entorno de Sites consultado no tenía variables configuradas. El despliegue propio de Cloudflare ya tiene D1 y KV, pero todavía no contiene credenciales de proveedores. No se verificaron con proveedores reales:
+El entorno de Sites consultado no tenía variables configuradas. El despliegue propio de Cloudflare ya tiene D1 y KV y las claves de la instancia de desarrollo de Clerk, activadas por elección del propietario para workers.dev. No hay instancia de producción de Clerk ni cuenta administrativa asignada. No se verificaron con proveedores reales:
 
 - Inicio de sesión y permisos con cuentas de Clerk.
 - Llamadas y agentes Vapi.

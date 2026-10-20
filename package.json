@@ -20,6 +20,7 @@
     "@astrojs/react": "^7.1.0",
     "@clerk/backend": "^3.26.0",
     "@clerk/clerk-js": "^6.40.0",
+    "@clerk/localizations": "^4.24.0",
     "@vapi-ai/web": "^3.0.0",
     "astro": "^7.4.1",
     "lucide-react": "^0.468.0",

@@ -6,3 +6,6 @@
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:760px){.sidebar{visibility:hidden}.sidebar.open{visibility:visible}}.modal:focus{outline:none}
 .sidebar{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#343a45 transparent}.sidebar>.brand,.sidebar>.workspace,.sidebar>nav,.sidebar>.nav-label,.sidebar-bottom{flex-shrink:0}
+.auth-actions{display:flex;align-items:center;gap:11px}.auth-sign-in{padding:5px 0;font-size:11px;color:#6f7681;white-space:nowrap}.auth-sign-in:hover{color:var(--accent)}.auth-user-button{display:flex;align-items:center;justify-content:center;min-width:32px;min-height:32px}.auth-sign-up{min-height:31px;padding:7px 10px;font-size:10px}@media(max-width:760px){.top-actions{gap:10px}.auth-actions{gap:8px}.auth-sign-in{font-size:10px}.auth-sign-up{font-size:9px;min-height:29px;padding:6px 8px}.top-actions>.website-link{font-size:0;gap:0}.top-actions>.website-link svg{width:17px;height:17px}}@media(max-width:390px){.auth-actions{gap:6px}.auth-sign-in{font-size:9px}.auth-sign-up{padding:6px;font-size:9px}.top-actions{gap:7px}}
+
+.auth-test-notice{display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:10px 14px;background:#fff8ee;border:1px solid #f2dfbd;border-radius:8px;color:#8a612d;font-size:11px}.auth-test-notice svg{flex-shrink:0}

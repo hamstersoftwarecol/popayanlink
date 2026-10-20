@@ -4,7 +4,9 @@
   "account_id": "0a752097fea8d3d143836ffcb796bdc1",
   "main": "dist/server/index.js",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "preview_urls": false,
   "d1_databases": [
@@ -16,11 +18,35 @@
     }
   ],
   "kv_namespaces": [
-    { "binding": "CACHE", "id": "dd8c5f828d4f438a8c409af335df9862" }
+    {
+      "binding": "CACHE",
+      "id": "dd8c5f828d4f438a8c409af335df9862"
+    }
   ],
   "ratelimits": [
-    { "name": "PUBLIC_API_LIMITER", "namespace_id": "347960231", "simple": { "limit": 30, "period": 60 } }
+    {
+      "name": "PUBLIC_API_LIMITER",
+      "namespace_id": "347960231",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
   ],
-  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
-  "vars": { "DEMO_CATALOG": "true", "LOCAL_ADMIN": "false" }
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "vars": {
+    "DEMO_CATALOG": "true",
+    "LOCAL_ADMIN": "false",
+    "APP_ORIGIN": "https://drivelink.business-alejandrolopezmurillo.workers.dev"
+  },
+  "routes": [
+    {
+      "pattern": "drivelink.agryvalores.com",
+      "custom_domain": true,
+      "zone_id": "47a8d35b4dee5c26f162626db2c78419"
+    }
+  ]
 }

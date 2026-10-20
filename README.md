@@ -12,7 +12,7 @@ Worker, D1 y KV publicados. Configuración y comandos: [DESPLIEGUE_CLOUDFLARE.md
 
 Es una base funcional desplegable, con datos persistentes y APIs verificadas. Sin credenciales, el panel muestra una **vista de ejemplo**, el catálogo es ilustrativo y las solicitudes de invitado se guardan como pendientes. No se simulan llamadas, mensajes enviados ni cobros. Las operaciones administrativas están bloqueadas por defecto.
 
-Clerk, Vapi, Kapso, KV y Stripe necesitan las cuentas, identificadores y secretos del negocio para activarse. Sus conexiones externas no se han probado con cuentas reales. Stripe es opcional y requiere una cuenta que pueda cobrar en COP. Esta versión aloja **un negocio por instalación**; no implementa suscripciones SaaS, aprovisionamiento automático de empresas ni aislamiento de múltiples negocios dentro de una sola base de datos.
+En el Worker del propietario, KV está conectado y Clerk usa la instancia de desarrollo por autorización expresa para probar el acceso en workers.dev. El registro no concede permisos administrativos; queda pendiente completar una sesión con una cuenta real. Vapi, Kapso y Stripe necesitan las cuentas, identificadores y secretos del negocio para activarse. Stripe es opcional y requiere una cuenta que pueda cobrar en COP. Esta versión aloja **un negocio por instalación**; no implementa suscripciones SaaS, aprovisionamiento automático de empresas ni aislamiento de múltiples negocios dentro de una sola base de datos.
 
 ## Ejecutar localmente
 
@@ -73,12 +73,15 @@ Astro genera el frontend estático. Un Worker ESM sirve el frontend y las APIs e
 Configura los valores de `.env.example` en el entorno del Worker:
 
 - `CLERK_PUBLISHABLE_KEY`: clave pública de la aplicación.
+- `PUBLIC_CLERK_PUBLISHABLE_KEY`: alias compatible con `clerk env pull` para Astro; el servidor y el script de carga también lo aceptan.
 - `CLERK_SECRET_KEY`: secreto del backend.
 - `ADMIN_USER_IDS`: IDs de usuario de Clerk separados por coma, sin asignaciones a partir de datos editables por el usuario.
 - `APP_ORIGIN`: origen exacto de tu despliegue.
 - `DEMO_CATALOG=false`: no ofrecer inventario ilustrativo en una base vacía.
 
 El cliente envía un token de sesión Bearer; el servidor verifica firma y origen autorizado. Cada recurso administrativo comprueba permisos. Los clientes solo ven/cancelan sus reservas. Sin Clerk, una cookie de invitado aleatoria, HttpOnly, SameSite y Secure en HTTPS mantiene las reservas en ese navegador. Una reserva de invitado no se transfiere automáticamente al iniciar sesión: implementa verificación de propiedad antes de migrarla a una cuenta permanente.
+
+Los controles visibles permiten iniciar sesión, crear cuenta y gestionar el perfil. Al cambiar de sesión se limpian las reservas y los datos administrativos anteriores antes de recargarlos. Las claves `pk_test_` activan un aviso de entorno de prueba. Nunca uses una clave secreta en variables con prefijo `PUBLIC_`.
 
 Guía oficial: https://clerk.com/docs/reference/backend/verify-token
 
