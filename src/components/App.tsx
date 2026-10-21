@@ -116,9 +116,10 @@ const raw:any=mod.default;const VapiCtor:any=(typeof raw==='function'?raw:null)?
  async function sendChatMessage(e?:React.FormEvent){
   if(e)e.preventDefault();
   if(!chatInput.trim()||!activeChat||chatSending)return;
+  const textToSend=chatInput.trim();
   setChatSending(true);
   try{
-   await api('/api/admin/message',{method:'POST',body:JSON.stringify({userId:activeChat.userId,body:chatInput.trim()})});
+   await api('/api/admin/message',{method:'POST',body:JSON.stringify({userId:activeChat.userId,phone:activeChat.phone,body:textToSend})});
    setChatInput('');
    notify('Mensaje enviado por WhatsApp.');
    await refresh();
@@ -195,7 +196,7 @@ const raw:any=mod.default;const VapiCtor:any=(typeof raw==='function'?raw:null)?
       <div className="chat-thread-header">
        <div>
         <h3>{activeChat.name}</h3>
-        <small>{activeChat.phone||activeChat.userId} · WhatsApp</small>
+        <small>{activeChat.phone||activeChat.userId.replace('whatsapp_','')} · WhatsApp</small>
        </div>
        <span className="tag tag-green">En línea</span>
       </div>

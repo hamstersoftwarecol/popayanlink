@@ -44,15 +44,15 @@ async function sendWhatsapp(env:Env,dest:string|{to?:string;recipient?:string},p
  return fetch(`https://api.kapso.ai/meta/whatsapp/v24.0/${encodeURIComponent(env.KAPSO_PHONE_NUMBER_ID)}/messages`,{
   method:'POST',
   headers:{'X-API-Key':env.KAPSO_API_KEY,'Content-Type':'application/json'},
-  body:JSON.stringify({messaging_product:'whatsapp',...(target.to?{recipient_type:'individual',to:target.to}:{recipient:target.recipient}),...payload})
+  body:JSON.stringify({messaging_product:'whatsapp',...(target.to?{to:target.to}:{recipient:target.recipient}),...payload})
  });
 }
 async function sendWhatsappTemplate(env:Env,dest:string|{to?:string;recipient?:string},templateName:string,parameters:string[]){
  return sendWhatsapp(env,dest,{type:'template',template:{name:templateName,language:{code:'es'},components:[{type:'body',parameters:parameters.map(text=>({type:'text',text:String(text||'-')}))}]}});
 }
-function whatsappBotReply(text:string):string{
+function contextualBotReply(text:string,lastOutbound=''):string{
  const t=(text||'').toLowerCase().trim();
- if(t==='1'||/alquil|renta|tarifa|disponib|diari/.test(t)){
+ if(t==='1'||/alquil|renta|tarifa|diari/.test(t)){
   return `🚗 *Alquiler de Vehículos en PopayanLink*\n\nOfrecemos alquiler con o sin conductor en Popayán. Todos los vehículos cuentan con seguro y kilometraje garantizado.\n\n👉 Consulta autos y cotiza en línea:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/catalogo\n\n¿Para qué fechas o qué tipo de auto buscas?`;
  }
  if(t==='2'||/taller|manten|mec[aá]nic|freno|aceite|cita|repara|sincroniz/.test(t)){
@@ -62,10 +62,23 @@ function whatsappBotReply(text:string):string{
   return `🚘 *Compra y Venta de Autos PopayanLink*\n\nVehículos seleccionados con peritaje certificado y documentación al día.\n\n👉 Conoce los autos disponibles y solicita prueba de manejo:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/ventas\n\n¿Te interesa algún modelo en particular?`;
  }
  if(t==='4'||/asesor|human|hablar|llam|contact|persona/.test(t)){
-  return `👤 *Atención Personalizada*\n\nUno de nuestros asesores en Popayán revisará tu mensaje y te contactará a la brevedad.\n\n🎙️ También puedes hablar de inmediato con nuestros agentes de voz con IA en:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/`;
+  return `👤 *Atención Personalizada*\n\nUno de nuestros asesores en Popayán revisará tu mensaje y te contactará a la brevedad por este chat.\n\n🎙️ También puedes hablar de inmediato con nuestros agentes de voz con IA en:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/`;
+ }
+ if(/\d{1,2}[\/\-]\d{1,2}|mañana|hoy|semana|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre/.test(t)){
+  return `📅 ¡Entendido! Registramos tu consulta para esas fechas. Uno de nuestros asesores revisará la disponibilidad y te responderá por este chat.\n\n👉 También puedes consultar vehículos disponibles en tiempo real en:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/catalogo`;
+ }
+ if(/^(ok|vale|listo|gracias|muchas gracias|perfecto|bueno|entendido|de acuerdo)$/i.test(t)){
+  return `¡Con gusto! Quedamos atentos a tus requerimientos. Si necesitas algo más, escribe 1 (Alquiler), 2 (Taller), 3 (Autos en venta) o 4 (Asesor).`;
+ }
+ if(lastOutbound.includes('Atención Personalizada')||lastOutbound.includes('Uno de nuestros asesores')){
+  return `👤 Tu mensaje ha sido notificado a nuestro equipo. Un asesor te responderá a la brevedad por este chat.`;
+ }
+ if(lastOutbound.includes('Bienvenido a *PopayanLink*')){
+  return `Indícanos qué necesitas: escribe *1* para Alquiler, *2* para Taller, *3* para Autos en venta o *4* para hablar con un asesor.`;
  }
  return `¡Hola! Bienvenido a *PopayanLink* 🚗🔧\nTu plataforma en Popayán para alquiler, taller y venta de vehículos.\n\n¿En qué podemos ayudarte hoy?\n\n1️⃣ *Alquiler de vehículos*\n2️⃣ *Taller y citas mecánicas*\n3️⃣ *Autos en venta*\n4️⃣ *Hablar con un asesor*\n\n👉 Responde con el número (1, 2, 3 o 4) o cuéntanos qué necesitas.`;
 }
+function whatsappBotReply(text:string):string{return contextualBotReply(text,'');}
 async function createBooking(env:Env,input:any,userId:string){
  const prior=await env.DB.prepare('SELECT * FROM bookings WHERE idempotency_key=? AND user_id=?').bind(input.idempotencyKey,userId).first();if(prior)return prior;
  const {vehicle,service,q}=await quote(env,input);await ensureReference(env,vehicle,service);const bookingId=id();const reference='DL-'+bookingId.slice(0,8).toUpperCase();
@@ -108,13 +121,14 @@ async function webhook(req:Request,env:Env,path:string){
    for(const entry of entries.slice(0,100)){const m=entry.message;if(!m?.id||m.kapso?.passive)continue;
     const phone=String(entry.conversation?.phone_number||m.from||'');
     const bsuid=String(m.from_user_id||entry.conversation?.business_scoped_user_id||'');
-    const dest=phone?phone:(bsuid||'');
+    const dest=bsuid?bsuid:(phone||'');
     const bodyText=String(m.text?.body||m.kapso?.content||'[Multimedia]').slice(0,10000);
     const booking:any=phone?await env.DB.prepare("SELECT user_id FROM bookings WHERE REPLACE(REPLACE(REPLACE(phone,'+',''),' ',''),'-','')=? ORDER BY created_at DESC LIMIT 1").bind(phone.replace(/[^0-9]/g,'')).first():null;
-    const userId=booking?.user_id||(bsuid?'whatsapp_'+bsuid:(phone?'whatsapp_'+phone:'whatsapp_'+m.id));
+    const userId=bsuid?'whatsapp_'+bsuid:(phone?'whatsapp_'+phone:(booking?.user_id||'whatsapp_'+m.id));
     await env.DB.prepare('INSERT OR IGNORE INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),userId,bodyText,'inbound','whatsapp',m.id,now()).run();
     if(dest&&bodyText!=='[Multimedia]'){
-     const reply=whatsappBotReply(bodyText);
+     const priorOutbound:any=await env.DB.prepare("SELECT body FROM messages WHERE user_id=? AND direction='outbound' ORDER BY created_at DESC LIMIT 1").bind(userId).first();
+     const reply=contextualBotReply(bodyText,priorOutbound?.body||'');
      try{
       const r=await sendWhatsapp(env,dest,{type:'text',text:{body:reply}});
       if(r&&r.ok){
@@ -176,7 +190,7 @@ async function api(req:Request,env:Env){const url=new URL(req.url),path=url.path
  if(path==='/api/admin/vehicles'&&req.method==='POST'){const values=z.array(z.object({name:z.string().min(3).max(100),brand:z.string().min(2),category:z.string().min(2),year:z.coerce.number().int().min(1990).max(2030),seats:z.coerce.number().int().min(1).max(20).default(5),daily_rate:z.coerce.number().int().positive(),sale_price:z.coerce.number().int().nonnegative().optional(),plate:z.string().min(5).max(15),image:z.url().startsWith('https://'),transmission:z.string().default('Automático'),fuel:z.string().default('Gasolina')})).min(1).max(200).parse(await body(req));await env.DB.batch(values.map(v=>env.DB.prepare('INSERT INTO vehicles (id,name,brand,category,year,seats,transmission,fuel,daily_rate,sale_price,status,image,plate,mileage,approved,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id(),v.name,v.brand,v.category,v.year,v.seats,v.transmission,v.fuel,v.daily_rate,v.sale_price||null,'available',v.image,v.plate.toUpperCase(),0,1,now())));return json({imported:values.length},201);}
  if(/^\/api\/admin\/vehicles\/[^/]+$/.test(path)&&req.method==='PATCH'){const v=z.object({status:z.enum(['available','maintenance','sold']).optional(),approved:z.boolean().optional()}).parse(await body(req));const vid=path.split('/').pop();const stmts=[];if(v.status)stmts.push(env.DB.prepare('UPDATE vehicles SET status=? WHERE id=?').bind(v.status,vid));if(v.approved!==undefined)stmts.push(env.DB.prepare('UPDATE vehicles SET approved=? WHERE id=?').bind(v.approved?1:0,vid));if(stmts.length)await env.DB.batch(stmts);return json({ok:true});}
  if(path==='/api/admin/payment'&&req.method==='POST'){const p=z.object({bookingId:z.string(),method:z.enum(['store','transfer']),reference:z.string().min(3).max(100)}).parse(await body(req));const r=await env.DB.prepare("UPDATE bookings SET payment_status='paid',payment_method=?,notes=COALESCE(notes,'') || ? WHERE id=? AND payment_status='pending' AND status!='cancelled'").bind(p.method,'\nPago verificado: '+p.reference,p.bookingId).run();if(!r.meta.changes)throw new HttpError(409,'Pago ya registrado o reserva no disponible.');return json({ok:true});}
- if(path==='/api/admin/message'&&req.method==='POST'){if(!env.KAPSO_API_KEY||!env.KAPSO_PHONE_NUMBER_ID)throw new HttpError(503,'Conecta Kapso para enviar mensajes de WhatsApp.');const m=z.object({bookingId:z.string().optional(),userId:z.string().optional(),phone:z.string().optional(),body:z.string().min(1).max(2000)}).parse(await body(req));let dest:string|{to?:string;recipient?:string}='';let targetUserId=m.userId||'';let customerName='Cliente';if(m.bookingId){const b:any=await env.DB.prepare('SELECT * FROM bookings WHERE id=?').bind(m.bookingId).first();if(!b)throw new HttpError(404,'Reserva no encontrada.');dest=b.phone;targetUserId=b.user_id;customerName=b.name||'Cliente';}else if(m.userId){targetUserId=m.userId;if(m.userId.startsWith('whatsapp_')){const raw=m.userId.replace('whatsapp_','');dest=raw.includes('.')?{recipient:raw}:{to:raw.replace(/[^0-9]/g,'')};}else{const b:any=await env.DB.prepare('SELECT phone, name FROM bookings WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(m.userId).first();if(b){dest=b.phone;customerName=b.name||customerName;}else if(m.phone){dest=m.phone;}}}else if(m.phone){dest=m.phone;targetUserId='whatsapp_'+m.phone.replace(/[^0-9]/g,'');}else{throw new HttpError(400,'Indica una reserva o contacto.');}if(!dest)throw new HttpError(400,'No se pudo determinar el destinatario.');let r=await sendWhatsapp(env,dest,{type:'text',text:{body:m.body}});if(r&&!r.ok){r=await sendWhatsappTemplate(env,dest,'seguimiento_cliente',[customerName,m.body]);}if(!r||!r.ok){const err:any=r?await r.json().catch(()=>({})):{};throw new HttpError(502,err?.error?.message||err?.error||'Kapso no aceptó el mensaje. Revisa la ventana de atención o el estado de la plantilla.');}const sent:any=await r.json().catch(()=>({}));await env.DB.prepare('INSERT INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),targetUserId,m.body,'outbound','whatsapp',sent.messages?.[0]?.id||null,now()).run();return json({ok:true});}
+ if(path==='/api/admin/message'&&req.method==='POST'){if(!env.KAPSO_API_KEY||!env.KAPSO_PHONE_NUMBER_ID)throw new HttpError(503,'Conecta Kapso para enviar mensajes de WhatsApp.');const m=z.object({bookingId:z.string().optional(),userId:z.string().optional(),phone:z.string().optional(),body:z.string().min(1).max(2000)}).parse(await body(req));let dest:string|{to?:string;recipient?:string}='';let targetUserId=m.userId||'';let customerName='Cliente';if(m.bookingId){const b:any=await env.DB.prepare('SELECT * FROM bookings WHERE id=?').bind(m.bookingId).first();if(!b)throw new HttpError(404,'Reserva no encontrada.');dest=b.phone;targetUserId=b.user_id;customerName=b.name||'Cliente';const prior:any=await env.DB.prepare("SELECT user_id FROM messages WHERE user_id LIKE 'whatsapp_%' AND (user_id=? OR user_id=?) ORDER BY created_at DESC LIMIT 1").bind(b.user_id,'whatsapp_'+b.phone.replace(/[^0-9]/g,'')).first();if(prior?.user_id?.startsWith('whatsapp_CO.')){dest={recipient:prior.user_id.replace('whatsapp_','')};targetUserId=prior.user_id;}}else if(m.userId){targetUserId=m.userId;if(m.userId.startsWith('whatsapp_')){const raw=m.userId.replace('whatsapp_','');if(raw.includes('.')){dest={recipient:raw};}else if(/^\d{7,15}$/.test(raw.replace(/[^0-9]/g,''))){dest={to:raw.replace(/[^0-9]/g,'')};}else{const b:any=await env.DB.prepare('SELECT phone, name FROM bookings WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(m.userId).first();if(b?.phone){dest={to:b.phone.replace(/[^0-9]/g,'')};customerName=b.name||customerName;}else if(m.phone){dest={to:m.phone.replace(/[^0-9]/g,'')};}}}else{const b:any=await env.DB.prepare('SELECT phone, name FROM bookings WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(m.userId).first();if(b?.phone){dest={to:b.phone.replace(/[^0-9]/g,'')};customerName=b.name||customerName;}else if(m.phone){dest={to:m.phone.replace(/[^0-9]/g,'')};}}}else if(m.phone){const clean=m.phone.replace(/[^0-9]/g,'');dest={to:clean};targetUserId='whatsapp_'+clean;}const validTarget=typeof dest==='string'?dest.trim():(dest.to||dest.recipient||'');if(!validTarget)throw new HttpError(400,'No se pudo determinar el destinatario para WhatsApp.');let r=await sendWhatsapp(env,dest,{type:'text',text:{body:m.body}});if(r&&!r.ok){r=await sendWhatsappTemplate(env,dest,'seguimiento_cliente',[customerName,m.body]);}if(!r||!r.ok){const err:any=r?await r.json().catch(()=>({})):{};const errMsg=err?.error?.message||err?.error||'';if(/24-hour|outside the 24|translation|not exist/i.test(errMsg)){throw new HttpError(422,'La ventana de 24 horas de WhatsApp ha expirado y Meta aún tiene la plantilla en revisión. El cliente debe escribir por WhatsApp para reabrir la sesión.');}throw new HttpError(502,errMsg||'Kapso no aceptó el mensaje. Revisa la ventana de atención o el estado de la plantilla.');}const sent:any=await r.json().catch(()=>({}));await env.DB.prepare('INSERT INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),targetUserId,m.body,'outbound','whatsapp',sent.messages?.[0]?.id||null,now()).run();return json({ok:true});}
  }
  throw new HttpError(404,'Recurso no encontrado.');
 }
