@@ -10,7 +10,7 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 
 - TypeScript: sin errores.
 - Compilación de Astro y Worker: correcta. Persiste una advertencia de optimización por un chunk de SDK superior a 500 KB; no impide la compilación.
-- Pruebas automatizadas: 20/20 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
+- Pruebas automatizadas: 22/22 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
 - Dependencias de producción: `npm audit --omit=dev`, cero vulnerabilidades detectadas.
 - Cloudflare Wrangler con D1 local: solicitudes de alquiler, taller y reserva de compra; cálculo de precio; persistencia; reintentos idempotentes; consulta de disponibilidad y cancelación. Todo correcto.
 - Pago manual simulado únicamente en un registro QA local: al cancelar queda `refund_required`. No hubo movimientos de dinero.
@@ -21,6 +21,12 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 - Hosting: sitio activo, acceso privado del propietario conservado.
 - D1 desplegada: binding `DB` y siete tablas de la aplicación presentes.
 - Logs de producción consultados, ventana de 180 minutos: sin eventos de error registrados. Esto no sustituye pruebas de tráfico real.
+
+## Imágenes locales
+
+Las seis fotografías se guardaron en `public/images/` en formato WebP, incluida la portada. HTML, CSS, catálogo de ejemplo y seed apuntan a `/images/...`. La compilación empaqueta estos archivos en el Worker y no requiere descargarlos. Se verifican tipo MIME, cabecera binaria y respuesta HTTP 200 de las seis imágenes. La migración de referencias conserva el resto de los datos del vehículo y no cambia imágenes personalizadas ajenas a estas fotografías.
+
+La actualización de D1 se aplicó tanto localmente como en el despliegue del propietario. En workers.dev, las seis imágenes responden HTTP 200 como `image/webp` y el catálogo solo devuelve rutas locales para estos seis vehículos.
 
 ## Landing y protección de rutas
 

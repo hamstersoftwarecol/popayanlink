@@ -72,3 +72,28 @@ test('signed Clerk sessions distinguish administrators from customers and reject
   assert.equal((await request(env,'/dashboard',{headers:{Cookie:'__session='+invalid}})).status,302);
  }
 });
+
+test('landing and catalog use bundled images served as valid WebP from the same origin',async()=>{
+ const env={DB:database()};
+ const html=await(await request(env,'/')).text();assert.doesNotMatch(html,/https:\/\/images\.unsplash\.com/);
+ const catalog=await(await request(env,'/api/catalog')).json();
+ assert.equal(catalog.vehicles.length,6);
+ for(const vehicle of catalog.vehicles){
+  assert.match(vehicle.image,/^\/images\/[a-z0-9-]+\.webp$/);
+  const r=await request(env,vehicle.image);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/webp');
+  const bytes=Buffer.from(await r.arrayBuffer());assert.ok(bytes.length>1000);assert.equal(bytes.subarray(0,4).toString(),'RIFF');assert.equal(bytes.subarray(8,12).toString(),'WEBP');
+ }
+});
+test('image migration replaces known remote photos while preserving unrelated vehicle data',()=>{
+ const db=new DatabaseSync(':memory:');
+ for(const file of readdirSync('drizzle').filter(f=>f.endsWith('.sql')&&!f.startsWith('0002')))db.exec(readFileSync('drizzle/'+file,'utf8'));
+ db.exec(readFileSync('db/seed.sql','utf8'));
+ db.prepare('UPDATE vehicles SET image=? WHERE id=?').run('https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&w=900','v1');
+ db.prepare('UPDATE vehicles SET image=? WHERE id=?').run('https://photos.example/custom.webp','v2');
+ const before=db.prepare('SELECT name,daily_rate,status FROM vehicles WHERE id=?').get('v1');
+ db.exec(readFileSync('drizzle/0002_local_vehicle_images.sql','utf8'));
+ assert.equal(db.prepare('SELECT image FROM vehicles WHERE id=?').get('v1').image,'/images/toyota-fortuner.webp');
+ assert.equal(db.prepare('SELECT image FROM vehicles WHERE id=?').get('v2').image,'https://photos.example/custom.webp');
+ assert.deepEqual(db.prepare('SELECT name,daily_rate,status FROM vehicles WHERE id=?').get('v1'),before);
+ assert.equal(db.prepare('SELECT COUNT(*) AS n FROM vehicles').get().n,6);db.close();
+});

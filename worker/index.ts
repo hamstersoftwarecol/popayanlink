@@ -128,7 +128,7 @@ async function api(req:Request,env:Env){const url=new URL(req.url),path=url.path
  }
  throw new HttpError(404,'Recurso no encontrado.');
 }
-const mime:Record<string,string>={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml',png:'image/png',ico:'image/x-icon',woff2:'font/woff2'};
+const mime:Record<string,string>={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',avif:'image/avif',gif:'image/gif',ico:'image/x-icon',woff2:'font/woff2'};
 export default {async fetch(req:Request,env:Env){try{let r:Response;if(new URL(req.url).pathname.startsWith('/api/'))r=await api(req,env);else{const url=new URL(req.url),path=url.pathname.replace(/\/$/,'')||'/';
  if(isAdminPath(path)){
   let allowed=false;try{allowed=(await identity(req,env,true)).admin;}catch{}

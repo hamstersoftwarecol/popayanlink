@@ -14,7 +14,8 @@
     "check": "tsc --noEmit",
     "deploy": "npm run deploy:cloudflare",
     "deploy:cloudflare": "npm run build && npm run check && npm test && wrangler d1 migrations apply drivelink --remote --config wrangler.cloudflare.jsonc && wrangler deploy --config wrangler.cloudflare.jsonc",
-    "secrets:cloudflare": "node scripts/cloudflare-secrets.mjs"
+    "secrets:cloudflare": "node scripts/cloudflare-secrets.mjs",
+    "images:download": "node scripts/download-images.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.0",

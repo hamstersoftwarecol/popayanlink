@@ -8,6 +8,10 @@ URL pública en la cuenta del propietario: https://drivelink.business-alejandrol
 
 Worker, D1 y KV publicados. Configuración y comandos: [DESPLIEGUE_CLOUDFLARE.md](./DESPLIEGUE_CLOUDFLARE.md). La copia de Sites conserva acceso privado y usa una D1 independiente.
 
+## Fotografías locales
+
+Las imágenes de portada, fondos e inventario ilustrativo están incluidas en `public/images/`. Se sirven desde `/images/...` y no dependen de Unsplash al visitar el sitio ni al compilarlo. La migración `0002_local_vehicle_images.sql` actualiza las referencias anteriores de esas seis fotografías sin alterar reservas, propietarios o disponibilidad. Procedencia y descarga opcional: [assets/README.md](./assets/README.md).
+
 ## Navegación pública y administración
 
 La raíz `/` muestra la landing para clientes. El catálogo está en `/catalogo`, el taller en `/taller`, los autos en venta en `/ventas` y las reservas del cliente o invitado en `/mi-portal`. La navegación pública no incluye el menú del administrador.
@@ -48,7 +52,7 @@ Opcional: `npm run seed:local` carga seis vehículos y cuatro servicios ilustrat
 
 ## Verificación
 
-Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 20 pruebas, las cinco regresiones corregidas y el límite de solicitudes del despliegue público.
+Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 22 pruebas, las cinco regresiones corregidas y el límite de solicitudes del despliegue público.
 
 ```sh
 npm run check
