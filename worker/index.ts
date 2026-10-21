@@ -10,6 +10,7 @@ const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache
 async function stableId(value:string){const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))).slice(0,16);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const h=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);}
 const now=()=>new Date().toISOString();
 const id=()=>crypto.randomUUID();
+const memStore=new Map<string,ArrayBuffer>();
 const sameSecret=(a:string,b:string)=>{const aa=new TextEncoder().encode(a),bb=new TextEncoder().encode(b);let diff=aa.length^bb.length;for(let i=0;i<Math.max(aa.length,bb.length);i++)diff|=(aa[i]||0)^(bb[i]||0);return diff===0;};
 async function identity(req:Request,env:Env,allowSessionCookie=false){
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /,'')||(allowSessionCookie?req.headers.get('cookie')?.match(/(?:^|;\s*)__session=([A-Za-z0-9_.-]+)(?:;|$)/)?.[1]:undefined);
@@ -154,12 +155,68 @@ async function webhook(req:Request,env:Env,path:string){
 }
 async function api(req:Request,env:Env){const url=new URL(req.url),path=url.pathname;
  if(req.method!=='GET'&&req.method!=='HEAD'&&!path.startsWith('/api/webhooks/')){const origin=req.headers.get('origin');if(origin&&origin!==url.origin&&origin!==env.APP_ORIGIN)throw new HttpError(403,'Origen no permitido.');}
- if(env.PUBLIC_API_LIMITER&&req.method==='POST'&&['/api/bookings','/api/leads','/api/listings','/api/quote'].includes(path)){
+ if(env.PUBLIC_API_LIMITER&&req.method==='POST'&&['/api/bookings','/api/leads','/api/listings','/api/quote','/api/upload-image'].includes(path)){
  const limited=await env.PUBLIC_API_LIMITER.limit({key:'public:'+String(req.headers.get('CF-Connecting-IP')||'unknown')});
  if(!limited.success)throw new HttpError(429,'Has realizado demasiadas solicitudes. Inténtalo de nuevo en un minuto.');
  }
  if(path.startsWith('/api/webhooks/'))return webhook(req,env,path);
+ if(/^\/api\/images\/[^/]+$/.test(path)&&req.method==='GET'){
+  const filename=path.replace('/api/images/','');
+  let bytes:ArrayBuffer|null=null;
+  if(env.CACHE){try{bytes=await env.CACHE.get('img:'+filename,'arrayBuffer');}catch{}}
+  if(!bytes&&memStore.has('img:'+filename))bytes=memStore.get('img:'+filename)!;
+  if(!bytes)throw new HttpError(404,'Imagen no encontrada.');
+  const ext=filename.split('.').pop()?.toLowerCase()||'jpeg';
+  const contentTypes:Record<string,string>={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',avif:'image/avif',gif:'image/gif',svg:'image/svg+xml'};
+  return new Response(bytes,{headers:{'Content-Type':contentTypes[ext]||'image/jpeg','Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'}});
+ }
  const user=await identity(req,env);
+ if(path==='/api/upload-image'&&req.method==='POST'){
+  requireUser(user);
+  const cType=req.headers.get('content-type')||'';
+  let bytes:ArrayBuffer;
+  let ext='webp';
+  if(cType.includes('multipart/form-data')){
+   const form=await req.formData();
+   const file=form.get('image')||form.get('file');
+   if(!file||typeof file==='string')throw new HttpError(400,'Selecciona un archivo de imagen válido.');
+   const blob=file as File;
+   if(blob.size>5*1024*1024)throw new HttpError(413,'La imagen no puede exceder los 5 MB.');
+   const allowed:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif','image/gif':'gif'};
+   const foundExt=allowed[blob.type.toLowerCase()];
+   if(!foundExt)throw new HttpError(400,'Formato no compatible. Sube una imagen JPEG, PNG, WebP o AVIF.');
+   ext=foundExt;
+   bytes=await blob.arrayBuffer();
+  }else if(cType.includes('application/json')){
+   const b:any=await req.json().catch(()=>({}));
+   if(!b.data||typeof b.data!=='string')throw new HttpError(400,'Datos de imagen requeridos.');
+   const match=b.data.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+   if(!match)throw new HttpError(400,'Formato base64 inválido.');
+   const rawExt=match[1].toLowerCase().replace('jpeg','jpg');
+   const allowed=['jpg','png','webp','avif','gif'];
+   if(!allowed.includes(rawExt))throw new HttpError(400,'Formato de imagen no compatible.');
+   ext=rawExt;
+   const bin=atob(match[2]);
+   if(bin.length>5*1024*1024)throw new HttpError(413,'La imagen no puede exceder los 5 MB.');
+   const u8=new Uint8Array(bin.length);
+   for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+   bytes=u8.buffer;
+  }else if(cType.startsWith('image/')){
+   const allowed:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/avif':'avif','image/gif':'gif'};
+   const cleanMime=cType.split(';')[0].toLowerCase();
+   const foundExt=allowed[cleanMime];
+   if(!foundExt)throw new HttpError(400,'Formato no compatible. Sube una imagen JPEG, PNG, WebP o AVIF.');
+   ext=foundExt;
+   bytes=await req.arrayBuffer();
+   if(bytes.byteLength>5*1024*1024)throw new HttpError(413,'La imagen no puede exceder los 5 MB.');
+  }else{
+   throw new HttpError(400,'Tipo de contenido no compatible para subir imagen.');
+  }
+  const filename=`${id()}.${ext}`;
+  if(env.CACHE){try{await env.CACHE.put('img:'+filename,bytes);}catch{memStore.set('img:'+filename,bytes);}}
+  else{memStore.set('img:'+filename,bytes);}
+  return json({ok:true,url:`/api/images/${filename}`},201);
+ }
  if(path==='/api/session'&&req.method==='GET'){
  const r=json({admin:user.admin,guest:user.guest,clerkKey:env.CLERK_PUBLISHABLE_KEY||env.PUBLIC_CLERK_PUBLISHABLE_KEY||null,vapiKey:env.VAPI_PUBLIC_KEY||null,vapiAssistants:{receptionist:env.VAPI_RECEPTIONIST_ID||null,rental:env.VAPI_RENTAL_ID||null,repair:env.VAPI_REPAIR_ID||null,sale:env.VAPI_SALES_ID||null},integrations:{clerk:!!((env.CLERK_PUBLISHABLE_KEY||env.PUBLIC_CLERK_PUBLISHABLE_KEY)&&env.CLERK_SECRET_KEY),vapi:!!(env.VAPI_PUBLIC_KEY&&env.VAPI_RECEPTIONIST_ID&&env.VAPI_WEBHOOK_SECRET),kapso:!!(env.KAPSO_API_KEY&&env.KAPSO_PHONE_NUMBER_ID),kv:!!env.CACHE,payments:!!(env.STRIPE_SECRET_KEY&&env.STRIPE_WEBHOOK_SECRET)}});
  if(!user.userId)r.headers.append('Set-Cookie',`dl_guest=${id()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${url.protocol==='https:'?'; Secure':''}`);return r;
@@ -181,13 +238,13 @@ async function api(req:Request,env:Env){const url=new URL(req.url),path=url.path
   const res=await fetch('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+env.STRIPE_SECRET_KEY,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':'checkout_'+b.id},body:params.toString()});
   if(!res.ok)throw new HttpError(502,'La pasarela no aceptó el pago. Revisa que tu cuenta admita COP.');const checkout:any=await res.json();return json({url:checkout.url});
  }
- if(path==='/api/listings'&&req.method==='POST'){requireUser(user);const v=z.object({name:z.string().min(3).max(100),brand:z.string().min(2).max(60),year:z.number().int().min(1990).max(2030),plate:z.string().min(5).max(15),daily_rate:z.number().int().min(10000).max(10000000),image:z.url().startsWith('https://')}).parse(await body(req));await env.DB.prepare('INSERT INTO vehicles (id,name,brand,category,year,seats,transmission,fuel,daily_rate,status,image,plate,mileage,owner_id,approved,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id(),v.name,v.brand,'SUV',v.year,5,'Automático','Gasolina',v.daily_rate,'available',v.image,v.plate.toUpperCase(),0,user.userId,0,now()).run();return json({ok:true},201);}
+ if(path==='/api/listings'&&req.method==='POST'){requireUser(user);const v=z.object({name:z.string().min(3).max(100),brand:z.string().min(2).max(60),year:z.number().int().min(1990).max(2030),plate:z.string().min(5).max(15),daily_rate:z.number().int().min(10000).max(10000000),image:z.string().min(5).max(500).refine(s=>s.startsWith('https://')||s.startsWith('/'),'URL o ruta de imagen inválida')}).parse(await body(req));await env.DB.prepare('INSERT INTO vehicles (id,name,brand,category,year,seats,transmission,fuel,daily_rate,status,image,plate,mileage,owner_id,approved,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id(),v.name,v.brand,'SUV',v.year,5,'Automático','Gasolina',v.daily_rate,'available',v.image,v.plate.toUpperCase(),0,user.userId,0,now()).run();return json({ok:true},201);}
  if(path.startsWith('/api/admin/')){
  requireAdmin(user);
  if(path==='/api/admin/services'&&req.method==='POST'){const s=z.object({name:z.string().min(3).max(100),description:z.string().min(5).max(500),price:z.coerce.number().int().min(0),duration:z.coerce.number().int().min(15).max(480)}).parse(await body(req));await env.DB.prepare('INSERT INTO services (id,name,description,price,duration,active) VALUES (?,?,?,?,?,1)').bind(id(),s.name,s.description,s.price,s.duration).run();return json({ok:true},201);}
  if(path==='/api/admin/overview'&&req.method==='GET'){const [bookings,leads,vehicles,messages]=await Promise.all([env.DB.prepare('SELECT b.*,v.name as vehicle_name,s.name as service_name FROM bookings b LEFT JOIN vehicles v ON v.id=b.vehicle_id LEFT JOIN services s ON s.id=b.service_id ORDER BY b.created_at DESC LIMIT 250').all(),env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC LIMIT 250').all(),env.DB.prepare('SELECT * FROM vehicles ORDER BY created_at DESC').all(),env.DB.prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT 100').all()]);return json({bookings:bookings.results,leads:leads.results,vehicles:vehicles.results,messages:messages.results});}
  if(path==='/api/admin/settings'&&req.method==='PUT'){const s=z.partialRecord(z.enum(['rental','repair','sale']),z.boolean()).parse(await body(req));await env.DB.batch(Object.entries(s).map(([k,v])=>env.DB.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,JSON.stringify(v))));await env.CACHE?.delete('settings').catch(()=>{});return json({ok:true});}
- if(path==='/api/admin/vehicles'&&req.method==='POST'){const values=z.array(z.object({name:z.string().min(3).max(100),brand:z.string().min(2),category:z.string().min(2),year:z.coerce.number().int().min(1990).max(2030),seats:z.coerce.number().int().min(1).max(20).default(5),daily_rate:z.coerce.number().int().positive(),sale_price:z.coerce.number().int().nonnegative().optional(),plate:z.string().min(5).max(15),image:z.url().startsWith('https://'),transmission:z.string().default('Automático'),fuel:z.string().default('Gasolina')})).min(1).max(200).parse(await body(req));await env.DB.batch(values.map(v=>env.DB.prepare('INSERT INTO vehicles (id,name,brand,category,year,seats,transmission,fuel,daily_rate,sale_price,status,image,plate,mileage,approved,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id(),v.name,v.brand,v.category,v.year,v.seats,v.transmission,v.fuel,v.daily_rate,v.sale_price||null,'available',v.image,v.plate.toUpperCase(),0,1,now())));return json({imported:values.length},201);}
+ if(path==='/api/admin/vehicles'&&req.method==='POST'){const values=z.array(z.object({name:z.string().min(3).max(100),brand:z.string().min(2),category:z.string().min(2),year:z.coerce.number().int().min(1990).max(2030),seats:z.coerce.number().int().min(1).max(20).default(5),daily_rate:z.coerce.number().int().positive(),sale_price:z.coerce.number().int().nonnegative().optional(),plate:z.string().min(5).max(15),image:z.string().min(5).max(500).refine(s=>s.startsWith('https://')||s.startsWith('/'),'URL o ruta de imagen inválida'),transmission:z.string().default('Automático'),fuel:z.string().default('Gasolina')})).min(1).max(200).parse(await body(req));await env.DB.batch(values.map(v=>env.DB.prepare('INSERT INTO vehicles (id,name,brand,category,year,seats,transmission,fuel,daily_rate,sale_price,status,image,plate,mileage,approved,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id(),v.name,v.brand,v.category,v.year,v.seats,v.transmission,v.fuel,v.daily_rate,v.sale_price||null,'available',v.image,v.plate.toUpperCase(),0,1,now())));return json({imported:values.length},201);}
  if(/^\/api\/admin\/vehicles\/[^/]+$/.test(path)&&req.method==='PATCH'){const v=z.object({status:z.enum(['available','maintenance','sold']).optional(),approved:z.boolean().optional()}).parse(await body(req));const vid=path.split('/').pop();const stmts=[];if(v.status)stmts.push(env.DB.prepare('UPDATE vehicles SET status=? WHERE id=?').bind(v.status,vid));if(v.approved!==undefined)stmts.push(env.DB.prepare('UPDATE vehicles SET approved=? WHERE id=?').bind(v.approved?1:0,vid));if(stmts.length)await env.DB.batch(stmts);return json({ok:true});}
  if(path==='/api/admin/payment'&&req.method==='POST'){const p=z.object({bookingId:z.string(),method:z.enum(['store','transfer']),reference:z.string().min(3).max(100)}).parse(await body(req));const r=await env.DB.prepare("UPDATE bookings SET payment_status='paid',payment_method=?,notes=COALESCE(notes,'') || ? WHERE id=? AND payment_status='pending' AND status!='cancelled'").bind(p.method,'\nPago verificado: '+p.reference,p.bookingId).run();if(!r.meta.changes)throw new HttpError(409,'Pago ya registrado o reserva no disponible.');return json({ok:true});}
  if(path==='/api/admin/message'&&req.method==='POST'){if(!env.KAPSO_API_KEY||!env.KAPSO_PHONE_NUMBER_ID)throw new HttpError(503,'Conecta Kapso para enviar mensajes de WhatsApp.');const m=z.object({bookingId:z.string().optional(),userId:z.string().optional(),phone:z.string().optional(),body:z.string().min(1).max(2000)}).parse(await body(req));let dest:string|{to?:string;recipient?:string}='';let targetUserId=m.userId||'';let customerName='Cliente';if(m.bookingId){const b:any=await env.DB.prepare('SELECT * FROM bookings WHERE id=?').bind(m.bookingId).first();if(!b)throw new HttpError(404,'Reserva no encontrada.');dest=b.phone;targetUserId=b.user_id;customerName=b.name||'Cliente';const prior:any=await env.DB.prepare("SELECT user_id FROM messages WHERE user_id LIKE 'whatsapp_%' AND (user_id=? OR user_id=?) ORDER BY created_at DESC LIMIT 1").bind(b.user_id,'whatsapp_'+b.phone.replace(/[^0-9]/g,'')).first();if(prior?.user_id?.startsWith('whatsapp_CO.')){dest={recipient:prior.user_id.replace('whatsapp_','')};targetUserId=prior.user_id;}}else if(m.userId){targetUserId=m.userId;if(m.userId.startsWith('whatsapp_')){const raw=m.userId.replace('whatsapp_','');if(raw.includes('.')){dest={recipient:raw};}else if(/^\d{7,15}$/.test(raw.replace(/[^0-9]/g,''))){dest={to:raw.replace(/[^0-9]/g,'')};}else{const b:any=await env.DB.prepare('SELECT phone, name FROM bookings WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(m.userId).first();if(b?.phone){dest={to:b.phone.replace(/[^0-9]/g,'')};customerName=b.name||customerName;}else if(m.phone){dest={to:m.phone.replace(/[^0-9]/g,'')};}}}else{const b:any=await env.DB.prepare('SELECT phone, name FROM bookings WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(m.userId).first();if(b?.phone){dest={to:b.phone.replace(/[^0-9]/g,'')};customerName=b.name||customerName;}else if(m.phone){dest={to:m.phone.replace(/[^0-9]/g,'')};}}}else if(m.phone){const clean=m.phone.replace(/[^0-9]/g,'');dest={to:clean};targetUserId='whatsapp_'+clean;}const validTarget=typeof dest==='string'?dest.trim():(dest.to||dest.recipient||'');if(!validTarget)throw new HttpError(400,'No se pudo determinar el destinatario para WhatsApp.');let r=await sendWhatsapp(env,dest,{type:'text',text:{body:m.body}});if(r&&!r.ok){r=await sendWhatsappTemplate(env,dest,'seguimiento_cliente',[customerName,m.body]);}if(!r||!r.ok){const err:any=r?await r.json().catch(()=>({})):{};const errMsg=err?.error?.message||err?.error||'';if(/24-hour|outside the 24|translation|not exist/i.test(errMsg)){throw new HttpError(422,'La ventana de 24 horas de WhatsApp ha expirado y Meta aún tiene la plantilla en revisión. El cliente debe escribir por WhatsApp para reabrir la sesión.');}throw new HttpError(502,errMsg||'Kapso no aceptó el mensaje. Revisa la ventana de atención o el estado de la plantilla.');}const sent:any=await r.json().catch(()=>({}));await env.DB.prepare('INSERT INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),targetUserId,m.body,'outbound','whatsapp',sent.messages?.[0]?.id||null,now()).run();return json({ok:true});}

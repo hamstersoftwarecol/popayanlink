@@ -97,3 +97,42 @@ test('image migration replaces known remote photos while preserving unrelated ve
  assert.deepEqual(db.prepare('SELECT name,daily_rate,status FROM vehicles WHERE id=?').get('v1'),before);
  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM vehicles').get().n,6);db.close();
 });
+
+test('vehicle image upload persists in KV and serves via /api/images/ with proper headers',async()=>{
+ const kvMap=new Map();
+ const mockKV={
+  async get(k){return kvMap.get(k)||null;},
+  async put(k,v){kvMap.set(k,v);}
+ };
+ const env={DB:database(),CACHE:mockKV};
+ const cookie=await guest(env);
+ const unauth=await request(env,'/api/upload-image',{method:'POST',data:{data:'data:image/png;base64,iVBORw=='}});
+ assert.equal(unauth.status,401);
+ const fakePng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+ const rUpload=await request(env,'/api/upload-image',{method:'POST',cookie,data:{data:fakePng}});
+ assert.equal(rUpload.status,201);
+ const uploadRes=await rUpload.json();
+ assert.ok(uploadRes.ok);
+ assert.match(uploadRes.url,/^\/api\/images\/[a-f0-9-]+\.png$/);
+ const key='img:'+uploadRes.url.replace('/api/images/','');
+ assert.ok(kvMap.has(key));
+ const rImg=await request(env,uploadRes.url);
+ assert.equal(rImg.status,200);
+ assert.equal(rImg.headers.get('content-type'),'image/png');
+ assert.equal(rImg.headers.get('cache-control'),'public, max-age=31536000, immutable');
+ const rList=await request(env,'/api/listings',{method:'POST',cookie,data:{name:'Mazda CX-30',brand:'Mazda',year:2024,plate:'COL 999',daily_rate:220000,image:uploadRes.url}});
+ assert.equal(rList.status,201);
+ const v=await env.DB.prepare("SELECT * FROM vehicles WHERE plate='COL 999'").first();
+ assert.equal(v.image,uploadRes.url);
+
+ const form=new FormData();
+ form.append('image',new Blob([Buffer.from('RIFF1234WEBPVP8X')],{type:'image/webp'}),'prueba.webp');
+ const rForm=await worker.fetch(new Request('http://localhost/api/upload-image',{method:'POST',headers:{Cookie:cookie},body:form}),env);
+ assert.equal(rForm.status,201);
+ const formRes=await rForm.json();
+ assert.match(formRes.url,/^\/api\/images\/[a-f0-9-]+\.webp$/);
+ const rImgWebp=await request(env,formRes.url);
+ assert.equal(rImgWebp.status,200);
+ assert.equal(rImgWebp.headers.get('content-type'),'image/webp');
+});
+
