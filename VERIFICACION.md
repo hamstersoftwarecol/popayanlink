@@ -17,7 +17,6 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 - Navegador local: catálogo, taller, ventas, reservas, clientes, agentes, mensajes, finanzas, configuración, sitio web y portal cargan sin errores de conexión.
 - Clerk local: SDK e interfaz Core 3 cargan; la ventana real de inicio de sesión abre correctamente. Inicio de sesión, registro y menú de cuenta integrados; no se completó una sesión de usuario.
 - Clerk en workers.dev: `/api/session` confirma la instancia de desarrollo conectada; inicio de sesión y registro abren en español, con aviso visible de prueba. `/api/admin/overview` mantiene HTTP 403 para invitados. Falta el registro e inicio de sesión del propietario para verificar una sesión real.
-- Dominio adicional `drivelink.agryvalores.com`: HTTPS y `/api/session` responden 200. El propietario mantiene workers.dev como URL principal.
 - Hosting: sitio activo, acceso privado del propietario conservado.
 - D1 desplegada: binding `DB` y siete tablas de la aplicación presentes.
 - Logs de producción consultados, ventana de 180 minutos: sin eventos de error registrados. Esto no sustituye pruebas de tráfico real.

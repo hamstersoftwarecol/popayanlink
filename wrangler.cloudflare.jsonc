@@ -41,12 +41,5 @@
     "DEMO_CATALOG": "false",
     "LOCAL_ADMIN": "false",
     "APP_ORIGIN": "https://drivelink.business-alejandrolopezmurillo.workers.dev"
-  },
-  "routes": [
-    {
-      "pattern": "drivelink.agryvalores.com",
-      "custom_domain": true,
-      "zone_id": "47a8d35b4dee5c26f162626db2c78419"
-    }
-  ]
+  }
 }

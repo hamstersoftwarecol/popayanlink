@@ -9,7 +9,6 @@ Publicado el 20 de octubre de 2026, en America/Bogota.
 | Recurso | Nombre / binding | Estado |
 | --- | --- | --- |
 | Cloudflare Worker | `drivelink` | Publicado en workers.dev |
-| Dominio adicional | `drivelink.agryvalores.com` | Conectado, HTTPS y API responden 200; la dirección principal elegida es workers.dev |
 | D1 | `drivelink` / `DB` | Tres migraciones aplicadas, siete tablas de aplicación |
 | KV | `DRIVELINK_CACHE` / `CACHE` | Conectado y comprobado por el servidor |
 | Límite de solicitudes | `PUBLIC_API_LIMITER` | 30 solicitudes por minuto por IP para presupuesto, reserva, leads y publicaciones |
