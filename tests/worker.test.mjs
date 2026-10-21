@@ -44,7 +44,7 @@ test('direct dashboard pages redirect guests and forged sessions to access witho
  }
  assert.equal((await request(env,'/api/admin/overview',{cookie})).status,403);
  assert.equal((await request({...env,LOCAL_ADMIN:'true'},'/dashboard')).status,200);
- const publicHost=await worker.fetch(new Request('https://drivelink.example/dashboard'),{...env,LOCAL_ADMIN:'true'});
+ const publicHost=await worker.fetch(new Request('https://popayanlink.example/dashboard'),{...env,LOCAL_ADMIN:'true'});
  assert.equal(publicHost.status,302,'local admin flag never permits a public host');
 });
 

@@ -111,7 +111,7 @@ async function api(req:Request,env:Env){const url=new URL(req.url),path=url.path
   if(!b||(!user.admin&&b.user_id!==user.userId))throw new HttpError(404,'Reserva no encontrada.');
   if(b.payment_status!=='pending'||!['pending','confirmed'].includes(b.status))throw new HttpError(409,'Esta reserva no admite pagos.');
   const total=b.amount+(b.kind==='rental'?b.deposit:0);if(total<=0)throw new HttpError(400,'Esta cita no requiere pago.');
-  const origin=new URL(req.url).origin;const params=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'cop','line_items[0][price_data][unit_amount]':String(total*100),'line_items[0][price_data][product_data][name]':'Drivelink '+b.reference,'line_items[0][quantity]':'1',customer_email:b.email,'metadata[bookingId]':b.id,success_url:origin+'/?payment=received#portal',cancel_url:origin+'/?payment=cancelled#portal'});
+  const origin=new URL(req.url).origin;const params=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'cop','line_items[0][price_data][unit_amount]':String(total*100),'line_items[0][price_data][product_data][name]':'PopayanLink '+b.reference,'line_items[0][quantity]':'1',customer_email:b.email,'metadata[bookingId]':b.id,success_url:origin+'/?payment=received#portal',cancel_url:origin+'/?payment=cancelled#portal'});
   const res=await fetch('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+env.STRIPE_SECRET_KEY,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':'checkout_'+b.id},body:params.toString()});
   if(!res.ok)throw new HttpError(502,'La pasarela no aceptó el pago. Revisa que tu cuenta admita COP.');const checkout:any=await res.json();return json({url:checkout.url});
  }

@@ -20,7 +20,7 @@ async function loadClerkUI(publishableKey: string) {
       script.src = `https://${domain}/npm/@clerk/ui@1/dist/ui.browser.js`;
       script.async = true;
       script.crossOrigin = 'anonymous';
-      script.dataset.drivelinkClerkUi = 'true';
+      script.dataset.popayanlinkClerkUi = 'true';
       const timeout = window.setTimeout(() => {
         script.remove(); reject(new Error('Clerk tardó demasiado en responder.'));
       }, 20000);

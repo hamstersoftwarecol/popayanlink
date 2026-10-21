@@ -1,4 +1,4 @@
-# Fotografías incluidas en Drivelink
+# Fotografías incluidas en PopayanLink
 
 Las seis fotografías de vehículos se descargaron el 20 de octubre de 2026 desde los identificadores de Unsplash ya utilizados por el proyecto. `vehicle-images.json` conserva esos identificadores y los nombres de archivo para documentar su procedencia.
 
