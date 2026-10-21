@@ -110,7 +110,8 @@ const raw:any=mod.default;const VapiCtor:any=(typeof raw==='function'?raw:null)?
  const activeChat=chatConversations.find(c=>c.userId===activeChatUserId)||chatConversations[0]||null;
  useEffect(()=>{
   if(view==='messages'&&chatScrollRef.current){
-   chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;
+   const el=chatScrollRef.current;
+   requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
   }
  },[view,activeChat?.userId,adminData.messages]);
  async function sendChatMessage(e?:React.FormEvent){
