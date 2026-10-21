@@ -73,8 +73,8 @@ export default function App(){
   if(protectedView&&!authPending&&session?.guest&&!session?.admin){history.replaceState(null,'','/acceso?next='+encodeURIComponent(viewPaths[view]));setView('signin');setModal(null);}
   if(view==='signin'&&!authPending&&session&&!session.guest){go(resolveView(safeReturnPath(new URLSearchParams(location.search).get('next'))),true);}
  },[view,authPending,session?.guest,session?.admin]);
- const preview=!session?.admin;
- const displayBookings=preview&&view!=='portal'?demoBookings:bookings;
+ const preview=false;
+ const displayBookings=bookings;
  const filteredBookings=displayBookings.filter(b=>(bookingTab==='Todos'||b.kind===bookingTab)&&(statusFilter==='Todos'||b.status===statusFilter)&&(`${b.name} ${b.reference} ${b.vehicle_name||''}`.toLowerCase().includes(query.toLowerCase())));
  const filteredVehicles=vehicles.filter(v=>(category==='Todos'||v.category===category)&&(statusFilter==='Todos'||v.status===statusFilter)&&`${v.name} ${v.brand} ${v.plate}`.toLowerCase().includes(query.toLowerCase())&&(view!=='sales'||v.sale_price));
  async function changeBooking(b:Booking,status:string){setBusy(true);try{await api('/api/bookings/'+b.id,{method:'PATCH',body:JSON.stringify({status})});notify('Estado de la reserva actualizado.');await refresh();setModal(null);}catch(e:any){notify(e.message);}finally{setBusy(false);}}

@@ -38,7 +38,7 @@
     "head_sampling_rate": 0.1
   },
   "vars": {
-    "DEMO_CATALOG": "true",
+    "DEMO_CATALOG": "false",
     "LOCAL_ADMIN": "false",
     "APP_ORIGIN": "https://drivelink.business-alejandrolopezmurillo.workers.dev"
   },
