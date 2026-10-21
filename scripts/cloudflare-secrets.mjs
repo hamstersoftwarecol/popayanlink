@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {parseEnv} from 'node:util';
 import {spawn} from 'node:child_process';
-const allowed=new Set(['CLERK_PUBLISHABLE_KEY','CLERK_SECRET_KEY','ADMIN_USER_IDS','APP_ORIGIN','VAPI_PUBLIC_KEY','VAPI_RECEPTIONIST_ID','VAPI_RENTAL_ID','VAPI_REPAIR_ID','VAPI_SALES_ID','VAPI_WEBHOOK_SECRET','KAPSO_API_KEY','KAPSO_PHONE_NUMBER_ID','KAPSO_WEBHOOK_SECRET','STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET']);
+const allowed=new Set(['CLERK_PUBLISHABLE_KEY','CLERK_SECRET_KEY','ADMIN_USER_IDS','APP_ORIGIN','VAPI_PUBLIC_KEY','VAPI_PRIVATE_KEY','VAPI_API_KEY','VAPI_RECEPTIONIST_ID','VAPI_RENTAL_ID','VAPI_REPAIR_ID','VAPI_SALES_ID','VAPI_WEBHOOK_SECRET','KAPSO_API_KEY','KAPSO_PHONE_NUMBER_ID','KAPSO_WEBHOOK_SECRET','STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET']);
 let content;
 try{content=await readFile('.env.production','utf8');}catch{console.error('Crea .env.production a partir de .env.example y completa las claves de producción. El archivo no se guarda en Git.');process.exit(1);}
 const source=parseEnv(content);
