@@ -9,3 +9,36 @@
 .auth-actions{display:flex;align-items:center;gap:11px}.auth-sign-in{padding:5px 0;font-size:11px;color:#6f7681;white-space:nowrap}.auth-sign-in:hover{color:var(--accent)}.auth-user-button{display:flex;align-items:center;justify-content:center;min-width:32px;min-height:32px}.auth-sign-up{min-height:31px;padding:7px 10px;font-size:10px}@media(max-width:760px){.top-actions{gap:10px}.auth-actions{gap:8px}.auth-sign-in{font-size:10px}.auth-sign-up{font-size:9px;min-height:29px;padding:6px 8px}.top-actions>.website-link{font-size:0;gap:0}.top-actions>.website-link svg{width:17px;height:17px}}@media(max-width:390px){.auth-actions{gap:6px}.auth-sign-in{font-size:9px}.auth-sign-up{padding:6px;font-size:9px}.top-actions{gap:7px}}
 
 .auth-test-notice{display:flex;align-items:center;gap:8px;margin-bottom:18px;padding:10px 14px;background:#fff8ee;border:1px solid #f2dfbd;border-radius:8px;color:#8a612d;font-size:11px}.auth-test-notice svg{flex-shrink:0}
+
+/* Centro de Mensajes WhatsApp Chat */
+.messages-panel-chat{padding:24px;display:flex;flex-direction:column;gap:18px}
+.chat-container{display:grid;grid-template-columns:300px 1fr;border:1px solid #e7ebf0;border-radius:12px;overflow:hidden;background:#fff;height:620px}
+.chat-sidebar-list{border-right:1px solid #e7ebf0;background:#fafbfc;display:flex;flex-direction:column}
+.chat-list-header{padding:14px 18px;font-size:11.5px;font-weight:700;color:#67707e;border-bottom:1px solid #e7ebf0;text-transform:uppercase;letter-spacing:.5px}
+.chat-contact-items{flex:1;overflow-y:auto}
+.chat-contact-card{width:100%;text-align:left;padding:14px 16px;border-bottom:1px solid #edf0f4;display:flex;align-items:flex-start;gap:12px;background:transparent;border-left:3px solid transparent;transition:all .15s}
+.chat-contact-card:hover{background:#f3f5f8}
+.chat-contact-card.active{background:#fff;border-left-color:var(--accent);box-shadow:0 2px 8px #0000000a}
+.chat-contact-info{flex:1;min-width:0}
+.chat-contact-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:4px}
+.chat-contact-row b{font-size:12px;color:#2c333e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-contact-row small{font-size:10px;color:#9aa1ab;flex-shrink:0}
+.chat-contact-preview{font-size:11px;color:#78818f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;line-height:1.4}
+.chat-thread-pane{display:flex;flex-direction:column;background:#fff;height:100%}
+.chat-thread-header{padding:16px 22px;border-bottom:1px solid #e7ebf0;background:#fafbfc;display:flex;justify-content:space-between;align-items:center}
+.chat-thread-header h3{font-size:14px;color:#272c35;margin:0}
+.chat-thread-header small{font-size:11px;color:#858d99}
+.chat-messages-scroll{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:14px;background:#f8f9fa}
+.chat-msg-row{display:flex;width:100%}
+.chat-msg-row.inbound{justify-content:flex-start}
+.chat-msg-row.outbound{justify-content:flex-end}
+.chat-msg-bubble{max-width:70%;padding:12px 16px;border-radius:12px;line-height:1.55;font-size:12.5px;position:relative}
+.chat-msg-row.inbound .chat-msg-bubble{background:#fff;color:#2b323c;border:1px solid #e5e9ee;border-bottom-left-radius:3px}
+.chat-msg-row.outbound .chat-msg-bubble{background:var(--accent);color:#fff;border-bottom-right-radius:3px}
+.chat-msg-bubble p{margin:0;white-space:pre-wrap;word-break:break-word}
+.chat-msg-time{display:block;font-size:9.5px;margin-top:6px;opacity:.75;text-align:right}
+.chat-input-bar{padding:14px 18px;border-top:1px solid #e7ebf0;background:#fff;display:flex;align-items:flex-end;gap:12px}
+.chat-input-bar textarea{flex:1;border:1px solid #e0e4e9;border-radius:8px;padding:10px 12px;font-size:12.5px;resize:none;outline:none;font-family:inherit;min-height:44px;max-height:110px}
+.chat-input-bar textarea:focus{border-color:var(--accent)}
+.chat-input-bar .btn{flex-shrink:0;height:44px;display:flex;align-items:center;gap:7px;padding:0 18px}
+@media(max-width:768px){.chat-container{grid-template-columns:1fr;height:auto}.chat-sidebar-list{max-height:220px}}

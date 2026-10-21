@@ -1,5 +1,5 @@
 import React,{useEffect,useState,useRef} from 'react';
-import {LayoutDashboard,Car,CalendarDays,Wrench,ShoppingBag,Users,AudioLines,MessageSquare,Wallet,Settings,ChevronDown,ChevronRight,ArrowUpRight,ArrowRight,Plus,Search,Bell,PanelLeft,ExternalLink,HelpCircle,Download,ArrowDownLeft,Check,Clock,MoreHorizontal,X,SlidersHorizontal,Phone,Mic,Play,Pause,CheckCircle2,ArrowLeft,Upload,Mail,ShieldCheck,MapPin,Fuel,Gauge,UserRound,Link,LogOut,LoaderCircle,FileText,CircleDot,TriangleAlert} from 'lucide-react';
+import {LayoutDashboard,Car,CalendarDays,Wrench,ShoppingBag,Users,AudioLines,MessageSquare,Wallet,Settings,ChevronDown,ChevronRight,ArrowUpRight,ArrowRight,Plus,Search,Bell,PanelLeft,ExternalLink,HelpCircle,Download,ArrowDownLeft,Check,Clock,MoreHorizontal,X,SlidersHorizontal,Phone,Mic,Play,Pause,CheckCircle2,ArrowLeft,Upload,Mail,ShieldCheck,MapPin,Fuel,Gauge,UserRound,Link,LogOut,LoaderCircle,FileText,CircleDot,TriangleAlert,Send} from 'lucide-react';
 import Papa from 'papaparse';
 import {loadClerkClient} from '../lib/clerk-client';
 import PublicSite from './PublicSite';
@@ -15,8 +15,8 @@ const isoLocal=(d:Date)=>new Date(+d-d.getTimezoneOffset()*60000).toISOString().
 function csvDownload(name:string,rows:any[]){const blob=new Blob(['\ufeff'+Papa.unparse(rows.map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v]))))],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 export default function App(){
  const [view,setView]=useState('landing'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[session,setSession]=useState<any>(null),[vehicles,setVehicles]=useState<Vehicle[]>(sampleVehicles),[services,setServices]=useState<any[]>(sampleServices),[settings,setSettings]=useState<any>({rental:true,repair:true,sale:true}),[bookings,setBookings]=useState<Booking[]>([]),[adminData,setAdminData]=useState<any>({leads:[],messages:[]}),[isSample,setIsSample]=useState(true),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
- const [modal,setModal]=useState<any>(null),[toast,setToast]=useState(''),[notices,setNotices]=useState(false),[period,setPeriod]=useState('month'),[category,setCategory]=useState('Todos'),[statusFilter,setStatusFilter]=useState('Todos'),[busy,setBusy]=useState(false),[callActive,setCallActive]=useState(false),[callStatus,setCallStatus]=useState(''),[bookingTab,setBookingTab]=useState('Todos');
- const clerk=useRef<any>(null),vapi=useRef<any>(null),fileInput=useRef<HTMLInputElement>(null),userButton=useRef<HTMLDivElement>(null),refreshVersion=useRef(0);
+ const [modal,setModal]=useState<any>(null),[toast,setToast]=useState(''),[notices,setNotices]=useState(false),[period,setPeriod]=useState('month'),[category,setCategory]=useState('Todos'),[statusFilter,setStatusFilter]=useState('Todos'),[busy,setBusy]=useState(false),[callActive,setCallActive]=useState(false),[callStatus,setCallStatus]=useState(''),[bookingTab,setBookingTab]=useState('Todos'),[activeChatUserId,setActiveChatUserId]=useState<string>(''),[chatInput,setChatInput]=useState(''),[chatSending,setChatSending]=useState(false);
+ const clerk=useRef<any>(null),vapi=useRef<any>(null),fileInput=useRef<HTMLInputElement>(null),userButton=useRef<HTMLDivElement>(null),refreshVersion=useRef(0),chatScrollRef=useRef<HTMLDivElement>(null);
  const [authUser,setAuthUser]=useState<any>(null),[authReady,setAuthReady]=useState(false),[authError,setAuthError]=useState(''),[accessChecked,setAccessChecked]=useState(false);
  const notify=(msg:string)=>setToast(msg);
  async function api(path:string,options:RequestInit={}){const token=await clerk.current?.session?.getToken();const r=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...options.headers}});const d:any=await r.json();if(!r.ok){if(r.status===401){setSession((old:any)=>old?{...old,admin:false,guest:true}:old);setBookings([]);setAdminData({leads:[],messages:[]});setModal(null);}throw new Error(d.error||'No se pudo completar la operación.');}return d;}
@@ -83,6 +83,51 @@ export default function App(){
 const raw:any=mod.default;const VapiCtor:any=(typeof raw==='function'?raw:null)??(typeof raw?.default==='function'?raw.default:null)??((mod as any).Vapi);if(typeof VapiCtor!=='function'){console.error('Vapi export shape',mod);throw new Error('SDK de Vapi no inicializó correctamente. Recarga la página.');}const client=new VapiCtor(session.vapiKey);vapi.current=client;client.on('call-start',()=>{setCallActive(true);setCallStatus('Llamada en curso');});client.on('call-end',()=>{setCallActive(false);setCallStatus('Llamada finalizada');});client.on('error',(err:any)=>{console.error('vapi error',err);setCallActive(false);setCallStatus(err?.message||'No se pudo conectar. Comprueba el permiso del micrófono.');});await client.start(session.vapiAssistants[agent]);}catch(e:any){console.error('startCall catch',e);setCallStatus(e?.message||'No se pudo iniciar la llamada. Revisa tu micrófono.');}}
  const periodBookings=bookings.filter(b=>period==='all'||(period==='week'?Date.now()-+new Date(b.created_at||b.start_at)<=7*86400000:new Date(b.created_at||b.start_at).toISOString().slice(0,7)===new Date().toISOString().slice(0,7)));const totalPaid=periodBookings.filter(b=>b.payment_status==='paid').reduce((n,b)=>n+b.amount,0);
  const available=vehicles.filter(v=>v.status==='available').length;
+ const chatConversations=React.useMemo(()=>{
+  const map=new Map<string,{userId:string;name:string;phone?:string;lastMsg:any;messages:any[]}>();
+  const list=[...(adminData.messages||[])].sort((a:any,b:any)=>+new Date(a.created_at)-+new Date(b.created_at));
+  for(const m of list){
+   const uid=m.user_id||'desconocido';
+   if(!map.has(uid)){
+    const b=bookings.find((x:any)=>x.user_id===uid||(x.phone&&uid.includes(x.phone.replace(/[^0-9]/g,''))));
+    let name=b?.name;
+    if(!name){
+     if(uid.startsWith('whatsapp_')){
+      const raw=uid.replace('whatsapp_','');
+      name=raw.includes('.')?`WhatsApp (${raw.slice(0,10)}…)`:`+${raw}`;
+     }else{
+      name=`Usuario ${uid.slice(0,8)}`;
+     }
+    }
+    map.set(uid,{userId:uid,name,phone:b?.phone,lastMsg:m,messages:[]});
+   }
+   const c=map.get(uid)!;
+   c.messages.push(m);
+   c.lastMsg=m;
+  }
+  return Array.from(map.values()).sort((a,b)=>+new Date(b.lastMsg.created_at)-+new Date(a.lastMsg.created_at));
+ },[adminData.messages,bookings]);
+ const activeChat=chatConversations.find(c=>c.userId===activeChatUserId)||chatConversations[0]||null;
+ useEffect(()=>{
+  if(view==='messages'&&chatScrollRef.current){
+   chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;
+  }
+ },[view,activeChat?.userId,adminData.messages]);
+ async function sendChatMessage(e?:React.FormEvent){
+  if(e)e.preventDefault();
+  if(!chatInput.trim()||!activeChat||chatSending)return;
+  setChatSending(true);
+  try{
+   await api('/api/admin/message',{method:'POST',body:JSON.stringify({userId:activeChat.userId,body:chatInput.trim()})});
+   setChatInput('');
+   notify('Mensaje enviado por WhatsApp.');
+   await refresh();
+  }catch(err:any){
+   notify(err.message||'Error al enviar mensaje');
+  }finally{
+   setChatSending(false);
+  }
+ }
  const publicView=<PublicSite view={view} vehicles={vehicles} services={services} sample={isSample} settings={settings} session={session} user={authUser} authReady={authReady} authError={authError} loadError={loadError} gate={protectedView?(authPending?'loading':session?.guest?'signin':'forbidden'):undefined} onNavigate={go} onAuth={openAuth} onModal={setModal} onRetry={()=>window.location.reload()} userButton={<div className="auth-user-button" ref={userButton} aria-label="Menú de mi cuenta"/>} portalContent={<><BookingTable bookings={bookings} onSelect={b=>setModal({type:'detail',booking:b})}/><div className="public-portal-actions"><button className="public-btn public-btn-orange" onClick={()=>setModal({type:'booking',kind:'rental'})}>Nueva reserva <Plus size={17}/></button>{!authUser&&<button className="public-btn public-btn-outline" onClick={login}>Iniciar sesión</button>}</div></>}/>;
  return <>
   {protectedView&&adminAllowed?<div className="app-shell">
@@ -132,7 +177,45 @@ const raw:any=mod.default;const VapiCtor:any=(typeof raw==='function'?raw:null)?
     {(view==='bookings'||view==='portal')&&<><div className="catalog-heading"><div className="segmented">{['Todos','rental','repair','sale','test_drive'].map(k=><button key={k} className={bookingTab===k?'selected':''} onClick={()=>setBookingTab(k)}>{kindLabel[k]||'Todos'}{k==='Todos'&&<span>{view==='portal'?bookings.length:displayBookings.length}</span>}</button>)}</div><button className="btn btn-white" onClick={()=>csvDownload('popayanlink-reservas.csv',view==='portal'?bookings:displayBookings)}><Download size={15}/> Exportar</button></div><div className="panel"><div className="table-toolbar"><div className="search-field"><Search size={16}/><input placeholder="Buscar una reserva o un cliente…" value={query} onChange={e=>setQuery(e.target.value)}/></div><select aria-label="Filtrar reservas por estado" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="Todos">Todos los estados</option>{Object.keys(stateLabel).slice(0,5).map(s=><option key={s} value={s}>{stateLabel[s]}</option>)}</select></div><BookingTable bookings={view==='portal'?bookings.filter(b=>(bookingTab==='Todos'||b.kind===bookingTab)&&(statusFilter==='Todos'||b.status===statusFilter)&&`${b.name} ${b.reference}`.toLowerCase().includes(query.toLowerCase())):filteredBookings} onSelect={b=>setModal({type:'detail',booking:b})}/></div>{view==='portal'&&<div className="portal-note"><ShieldCheck size={18}/><p>{session?.guest?'Tus reservas se vinculan a esta sesión de invitado. Inicia sesión para usar una cuenta permanente en todos tus dispositivos.':'Tu información está protegida y vinculada a tu cuenta.'}</p><button className="btn btn-white" onClick={login}>Mi cuenta <ArrowRight size={15}/></button></div>}</>}
     {view==='customers'&&<section className="panel"><div className="table-toolbar"><div className="search-field"><Search size={16}/><input placeholder="Buscar un cliente…" value={query} onChange={e=>setQuery(e.target.value)}/></div><button className="btn btn-white" onClick={()=>csvDownload('popayanlink-clientes.csv',displayBookings)}><Download size={15}/> Exportar clientes</button></div><div className="table-scroll"><table><thead><tr><th>Cliente</th><th>Correo electrónico</th><th>Teléfono</th><th>Reservas</th><th>Acciones</th></tr></thead><tbody>{Array.from(new Map(displayBookings.map(b=>[b.email,b])).values()).filter(b=>`${b.name} ${b.email}`.toLowerCase().includes(query.toLowerCase())).map(b=><tr key={b.email}><td><span className="customer-cell"><span className="avatar pastel">{initials(b.name)}</span><b>{b.name}</b></span></td><td>{b.email}</td><td>{b.phone}</td><td>{displayBookings.filter(x=>x.email===b.email).length}</td><td><button className="text-button" onClick={()=>setModal({type:'detail',booking:b})}>Ver cliente <ChevronRight size={14}/></button></td></tr>)}</tbody></table></div>{!displayBookings.length&&<Empty icon={Users} text="Los clientes aparecerán cuando recibas tus primeras reservas."/>}</section>}
     {view==='agents'&&<><div className="ai-hero"><div className="ai-orb"><AudioLines size={44}/></div><div><span className="tag tag-purple">Atención inteligente</span><h2>La próxima conversación<br/>puede ser tu próxima reserva.</h2><p>Cuatro especialistas. Un negocio conectado, las 24 horas.</p></div><button className="btn btn-primary" onClick={()=>startCall()}>{callActive?<Pause size={16}/>:<Mic size={16}/>} {callActive?'Finalizar llamada':'Probar recepcionista'}</button></div>{callStatus&&<div className="call-status"><span className={callActive?'live-dot':''}/>{callStatus}</div>}<div className="agent-grid">{[{id:'receptionist',title:'Lucía',role:'Recepcionista',desc:'Da la bienvenida, responde consultas y conecta con el especialista adecuado.',Icon:Phone,color:'purple'},{id:'rental',title:'Mateo',role:'Especialista en alquiler',desc:'Consulta disponibilidad, cotiza y registra solicitudes de alquiler.',Icon:Car,color:'orange'},{id:'repair',title:'Sofía',role:'Asesora de taller',desc:'Explica los servicios, consulta horarios y agenda el cuidado del auto.',Icon:Wrench,color:'blue'},{id:'sale',title:'Nicolás',role:'Asesor de ventas',desc:'Presenta el inventario, agenda pruebas de manejo y captura oportunidades.',Icon:ShoppingBag,color:'green'}].map(a=><article className="panel agent-card" key={a.id}><div className="agent-card-top"><span className={'agent-avatar '+a.color}><a.Icon size={26}/></span><span className={'tag '+(session?.vapiAssistants?.[a.id]?'tag-green':'tag-gray')}>{session?.vapiAssistants?.[a.id]?'Configurado':'Por conectar'}</span></div><h2>{a.title}</h2><strong>{a.role}</strong><p>{a.desc}</p><div className="agent-features"><span><Check size={13}/> Consulta datos en tiempo real</span><span><Check size={13}/> Solicitudes desde la llamada</span></div><button className="btn btn-white" onClick={()=>startCall(a.id)}><Play size={14}/> Probar agente</button></article>)}</div><section className="panel"><div className="panel-heading"><div><h2>Solicitudes de devolución de llamada</h2><p>Clientes que pidieron continuar la conversación.</p></div><span className="count-badge">{adminData.leads.length}</span></div>{adminData.leads.length?<div className="lead-list">{adminData.leads.map((l:any)=><div key={l.id}><span className="avatar pastel">{initials(l.name||'Cliente')}</span><span><b>{l.name}</b><small>{l.notes}</small></span><a href={'tel:'+l.phone}>{l.phone}</a></div>)}</div>:<Empty icon={Phone} text="Las solicitudes calificadas de tus llamadas aparecerán aquí."/>}</section></>}
-    {view==='messages'&&<section className="panel messages-panel"><div className="panel-heading"><div><h2>Centro de mensajes</h2><p>Conversa con tus clientes por WhatsApp.</p></div><span className={'tag '+(session?.integrations.kapso?'tag-green':'tag-gray')}>{session?.integrations.kapso?'Kapso conectado':'Kapso por conectar'}</span></div>{adminData.messages.length?<div className="lead-list">{adminData.messages.map((m:any)=><div key={m.id}><MessageSquare size={20}/><span><b>{m.body}</b><small>{date(m.created_at)} · WhatsApp · {m.direction==='inbound'?'Recibido':'Aceptado por WhatsApp'}</small></span></div>)}</div>:<Empty icon={MessageSquare} text="Aún no hay conversaciones. Selecciona una reserva para enviar un mensaje a su cliente."/>}<button className="btn btn-primary" onClick={()=>go('bookings')}>Ir a reservas <ArrowRight size={16}/></button></section>}
+    {view==='messages'&&<section className="panel messages-panel-chat"><div className="panel-heading"><div><h2>Centro de mensajes</h2><p>Conversa en vivo con tus clientes por WhatsApp.</p></div><div className="heading-actions"><span className={'tag '+(session?.integrations.kapso?'tag-green':'tag-gray')}>{session?.integrations.kapso?'Kapso conectado':'Kapso por conectar'}</span><button className="btn btn-white" onClick={()=>refresh()}><Clock size={14}/> Actualizar</button></div></div>
+    {!adminData.messages?.length?<Empty icon={MessageSquare} text="Aún no hay conversaciones. Cuando un cliente escriba por WhatsApp o envíes un mensaje desde una reserva, aparecerán aquí."/>:<div className="chat-container">
+     <aside className="chat-sidebar-list">
+      <div className="chat-list-header">Conversaciones ({chatConversations.length})</div>
+      <div className="chat-contact-items">
+       {chatConversations.map(c=><button key={c.userId} className={'chat-contact-card '+(activeChat?.userId===c.userId?'active':'')} onClick={()=>setActiveChatUserId(c.userId)}>
+        <span className="avatar pastel">{initials(c.name)}</span>
+        <div className="chat-contact-info">
+         <div className="chat-contact-row"><b>{c.name}</b><small>{date(c.lastMsg.created_at,true)}</small></div>
+         <p className="chat-contact-preview">{c.lastMsg.direction==='outbound'?'Tú: ':''}{c.lastMsg.body}</p>
+        </div>
+       </button>)}
+      </div>
+     </aside>
+     {activeChat?<div className="chat-thread-pane">
+      <div className="chat-thread-header">
+       <div>
+        <h3>{activeChat.name}</h3>
+        <small>{activeChat.phone||activeChat.userId} · WhatsApp</small>
+       </div>
+       <span className="tag tag-green">En línea</span>
+      </div>
+      <div className="chat-messages-scroll" ref={chatScrollRef}>
+       {activeChat.messages.map(m=><div key={m.id} className={'chat-msg-row '+(m.direction==='outbound'?'outbound':'inbound')}>
+        <div className="chat-msg-bubble">
+         <p>{m.body}</p>
+         <span className="chat-msg-time">{date(m.created_at)}</span>
+        </div>
+       </div>)}
+      </div>
+      <form className="chat-input-bar" onSubmit={sendChatMessage}>
+       <textarea rows={1} placeholder={session?.integrations.kapso?'Escribe un mensaje a '+activeChat.name+' (Enter para enviar)…':'Conecta Kapso para responder'} value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}}} disabled={!session?.integrations.kapso||chatSending}/>
+       <button type="submit" className="btn btn-primary" disabled={!chatInput.trim()||!session?.integrations.kapso||chatSending}>
+        {chatSending?<LoaderCircle size={16} className="spin"/>:<Send size={16}/>} Responder
+       </button>
+      </form>
+     </div>:<div className="chat-thread-pane"><Empty icon={MessageSquare} text="Selecciona una conversación para ver los mensajes."/></div>}
+    </div>}
+    </section>}
     {view==='finances'&&<><div className="finance-stats"><article className="panel"><Wallet size={22}/><span>Pagos verificados</span><strong>{money(preview?2610000:totalPaid)}</strong></article><article className="panel"><Clock size={22}/><span>Pendiente de pago</span><strong>{money(displayBookings.filter(b=>b.payment_status==='pending').reduce((a,b)=>a+b.amount,0))}</strong></article><article className="panel"><FileText size={22}/><span>Comprobantes de reserva</span><strong>{displayBookings.length}</strong></article></div><div className="alert neutral"><ShieldCheck size={18}/><p>El pago en tienda y por transferencia requiere verificación del administrador. {session?.integrations.payments?'La pasarela de pago en línea está configurada.':'La pasarela de pago en línea aún no está configurada.'} Los comprobantes de reserva no son facturas fiscales.</p></div><section className="panel"><div className="panel-heading"><h2>Movimientos recientes</h2><button className="btn btn-white" onClick={()=>csvDownload('popayanlink-pagos.csv',displayBookings.map(b=>({reserva:b.reference,cliente:b.name,importe:b.amount,estado:b.payment_status})))}><Download size={15}/> Exportar</button></div><BookingTable bookings={displayBookings} onSelect={b=>setModal({type:'detail',booking:b})}/></section></>}
     {view==='settings'&&<div className="settings-grid"><section className="panel settings-card"><h2>Servicios de tu negocio</h2><p>Desactiva un servicio para recibir inscripciones de interesados.</p>{[{key:'rental',label:'Alquiler de vehículos',desc:'Con conductor o sin conductor.'},{key:'repair',label:'Taller y mantenimiento',desc:'Citas, diagnóstico y reparaciones.'},{key:'sale',label:'Compra y venta',desc:'Pruebas de manejo y reservas de autos.'}].map(s=><div className="setting-row" key={s.key}><span><b>{s.label}</b><small>{s.desc}</small></span><button role="switch" aria-label={s.label} aria-checked={settings[s.key]!==false} className={'switch '+(settings[s.key]!==false?'on':'')} onClick={async()=>{try{await api('/api/admin/settings',{method:'PUT',body:JSON.stringify({[s.key]:settings[s.key]===false})});await refresh();notify('Servicio actualizado.');}catch(e:any){notify(e.message);}}}><span/></button></div>)}</section><section className="panel settings-card"><h2>Integraciones</h2><p>Las credenciales se configuran de forma segura en el servidor.</p>{[{name:'Clerk',desc:'Acceso de clientes y administradores',key:'clerk'},{name:'Vapi',desc:'Recepcionista y agentes de voz',key:'vapi'},{name:'Kapso',desc:'Mensajería de WhatsApp',key:'kapso'},{name:'Cloudflare KV',desc:'Caché de configuración',key:'kv'},{name:'Stripe',desc:'Pagos en línea con verificación por webhook',key:'payments'}].map(i=><div className="setting-row" key={i.key}><span><b>{i.name}</b><small>{i.desc}</small></span><span className={'tag '+(session?.integrations[i.key]?'tag-green':'tag-gray')}>{session?.integrations[i.key]?'Configurado':'Por conectar'}</span></div>)}<button className="btn btn-white" onClick={()=>setModal({type:'help'})}>Ver guía de configuración <ArrowUpRight size={15}/></button></section><section className="panel settings-card"><h2>Tu cuenta</h2><p>{session?.admin?'Sesión de administrador activa.':'Explora la plataforma o inicia sesión para administrar.'}</p><div className="button-row"><button className="btn btn-primary" onClick={login}><UserRound size={16}/> {authUser?'Gestionar cuenta':'Iniciar sesión'}</button>{authUser&&<button className="btn btn-white" onClick={async()=>{await clerk.current.signOut();location.reload();}}><LogOut size={16}/> Salir</button>}</div></section></div>}
     <footer className="page-footer"><span><span className="footer-logo">p</span> Tu negocio, en la mejor dirección.</span><span>PopayanLink © {new Date().getFullYear()} <span className="footer-sep">|</span> <button onClick={()=>setModal({type:'help'})}>Ayuda y soporte</button></span></footer>
