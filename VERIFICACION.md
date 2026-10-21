@@ -10,7 +10,7 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 
 - TypeScript: sin errores.
 - Compilación de Astro y Worker: correcta. Persiste una advertencia de optimización por un chunk de SDK superior a 500 KB; no impide la compilación.
-- Pruebas automatizadas: 15/15 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
+- Pruebas automatizadas: 20/20 aprobadas, ejecutando el Worker compilado contra SQLite con las migraciones D1.
 - Dependencias de producción: `npm audit --omit=dev`, cero vulnerabilidades detectadas.
 - Cloudflare Wrangler con D1 local: solicitudes de alquiler, taller y reserva de compra; cálculo de precio; persistencia; reintentos idempotentes; consulta de disponibilidad y cancelación. Todo correcto.
 - Pago manual simulado únicamente en un registro QA local: al cancelar queda `refund_required`. No hubo movimientos de dinero.
@@ -21,6 +21,17 @@ La aplicación base funciona en las comprobaciones realizadas. Se corrigieron ci
 - Hosting: sitio activo, acceso privado del propietario conservado.
 - D1 desplegada: binding `DB` y siete tablas de la aplicación presentes.
 - Logs de producción consultados, ventana de 180 minutos: sin eventos de error registrados. Esto no sustituye pruebas de tráfico real.
+
+## Landing y protección de rutas
+
+- Landing pública en `/`, con navegación y diseño propios, servicios, catálogo destacado, preguntas frecuentes y publicación de propietarios.
+- Revisión visual en escritorio y en 390 px, menú móvil y apertura del formulario de taller correctos.
+- Rutas públicas mantienen HTTP 200 al recargar y no incluyen el menú ni los informes administrativos en el HTML inicial.
+- Páginas `/dashboard` y `/dashboard/*` redirigen visitantes a `/acceso`, con `Cache-Control: no-store`.
+- El enlace antiguo `/#dashboard` también termina en el acceso sin mostrar el panel.
+- Después de publicar en Cloudflare: raíz, catálogo, taller, ventas y portal devuelven HTTP 200; `/dashboard` y `/dashboard/clientes` devuelven HTTP 302 hacia `/acceso`; la API administrativa mantiene HTTP 403 sin autorización.
+- Pruebas con JWT RSA generados localmente: el administrador autorizado accede; un cliente autenticado no recibe permisos; tokens vencidos y de otro origen se rechazan. No se crearon usuarios de prueba en Clerk.
+- Las APIs administrativas conservan la validación Bearer y no aceptan la cookie de página como sustituto. El parámetro de retorno del acceso rechaza destinos externos.
 
 ## Fallos reproducidos y corregidos
 

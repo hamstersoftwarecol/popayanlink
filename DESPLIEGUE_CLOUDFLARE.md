@@ -30,8 +30,12 @@ El administrador permanece protegido: `LOCAL_ADMIN=false` y los endpoints admini
 - Vehículo excluido de la disponibilidad durante la solicitud.
 - Una segunda sesión de invitado no pudo ver la solicitud de la primera.
 - Solicitud QA `DL-136048DD` cancelada al terminar, sin cobro ni mensajes externos.
-- Compilación y TypeScript correctos; 15/15 pruebas aprobadas.
+- Compilación y TypeScript correctos; 20/20 pruebas aprobadas.
 - Cero vulnerabilidades detectadas por `npm audit --omit=dev`.
+
+## Entrada pública y panel
+
+La raíz es la landing pública. El panel administrativo y sus secciones se encuentran en `/dashboard` y `/dashboard/*`. Los visitantes son redirigidos a `/acceso`; la aplicación espera la verificación de permisos antes de renderizar el menú y los datos del panel. No se elevan permisos al crear una cuenta.
 
 ## Volver a desplegar
 

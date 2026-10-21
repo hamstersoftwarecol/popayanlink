@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {createHmac} from 'node:crypto';
+import {createHmac,generateKeyPairSync,sign} from 'node:crypto';
 import worker from '../dist/server/index.js';
 function database(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')))db.exec(readFileSync('drizzle/'+f,'utf8'));function prepared(sql,args=[]){return {bind(...values){return prepared(sql,values)},async all(){return {results:db.prepare(sql).all(...args)}},async first(){return db.prepare(sql).get(...args)||null},_run(){const r=db.prepare(sql).run(...args);return {meta:{changes:r.changes}}},async run(){return this._run()}}}return {prepare:sql=>prepared(sql),async batch(stmts){db.exec('BEGIN');try{const result=[];for(const s of stmts)result.push(s._run());db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}}};}
 function booking(overrides={}){const d=new Date(Date.now()+7*86400000);d.setUTCHours(14,0,0,0);return {kind:'rental',vehicleId:'v1',name:'Cliente de prueba',email:'cliente@example.com',phone:'+573001112233',startAt:d.toISOString(),endAt:new Date(+d+2*86400000).toISOString(),driver:false,delivery:'office',paymentMethod:'store',idempotencyKey:crypto.randomUUID(),...overrides};}
@@ -23,3 +23,52 @@ test('availability rejects partial or reversed date ranges and Vapi uses the sam
 test('test drives cannot finish after business closing time',async()=>{const env={DB:database()};const d=new Date(Date.now()+7*86400000);while(d.getUTCDay()===0)d.setUTCDate(d.getUTCDate()+1);d.setUTCHours(22,30,0,0);assert.equal((await request(env,'/api/quote',{method:'POST',data:booking({kind:'test_drive',vehicleId:'v2',startAt:d.toISOString(),endAt:undefined})})).status,400);});
 test('cancelling a paid reservation flags the required refund',async()=>{const env={DB:database(),LOCAL_ADMIN:'true'},cookie=await guest(env);const b=await(await request(env,'/api/bookings',{method:'POST',cookie,data:booking()})).json();assert.equal((await request(env,'/api/admin/payment',{method:'POST',data:{bookingId:b.id,method:'store',reference:'QA-PAYMENT'}})).status,200);assert.equal((await request(env,'/api/bookings/'+b.id,{method:'PATCH',cookie,data:{status:'cancelled'}})).status,200);assert.equal((await env.DB.prepare('SELECT * FROM bookings WHERE id=?').bind(b.id).first()).payment_status,'refund_required');});
 test('public Cloudflare deployment limits write requests without blocking reads',async()=>{let calls=0;const env={DB:database(),PUBLIC_API_LIMITER:{async limit({key}){assert.equal(key,'public:203.0.113.10');calls++;return {success:false};}}};const r=await request(env,'/api/leads',{method:'POST',headers:{'CF-Connecting-IP':'203.0.113.10'},data:{name:'QA',email:'qa@example.com',interest:'rental'}});assert.equal(r.status,429);assert.equal((await request(env,'/api/catalog')).status,200);assert.equal(calls,1);assert.equal((await env.DB.prepare('SELECT * FROM leads').all()).results.length,0);});
+
+test('public landing is served at the root without the admin shell; public routes survive refresh',async()=>{
+ const env={DB:database()};
+ for(const path of ['/','/catalogo','/taller','/ventas','/mi-portal','/acceso']){
+  const r=await request(env,path);assert.equal(r.status,200,path);
+  const html=await r.text();assert.match(html,/El camino empieza con un buen auto/);
+  assert.doesNotMatch(html,/class="sidebar|Ingresos totales|Últimas reservas|Santiago Ramírez/);
+ }
+ assert.equal((await request(env,'/pagina-inexistente')).status,404);
+});
+test('direct dashboard pages redirect guests and forged sessions to access without granting administration',async()=>{
+ const env={DB:database()},cookie=await guest(env);
+ for(const path of ['/dashboard','/dashboard/reservas','/dashboard/clientes','/dashboard/configuracion','/dashboard/']){
+  for(const headers of [{},{Cookie:cookie},{Cookie:'__session=forged.token.value'}]){
+   const r=await request(env,path,{headers});assert.equal(r.status,302,path);
+   const target=new URL(r.headers.get('location'));assert.equal(target.pathname,'/acceso');assert.ok(target.searchParams.get('next').startsWith('/dashboard'));
+   assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(await r.text(),'');
+  }
+ }
+ assert.equal((await request(env,'/api/admin/overview',{cookie})).status,403);
+ assert.equal((await request({...env,LOCAL_ADMIN:'true'},'/dashboard')).status,200);
+ const publicHost=await worker.fetch(new Request('https://drivelink.example/dashboard'),{...env,LOCAL_ADMIN:'true'});
+ assert.equal(publicHost.status,302,'local admin flag never permits a public host');
+});
+
+test('signed Clerk sessions distinguish administrators from customers and reject expired or foreign-origin tokens',async()=>{
+ const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+ const env={DB:database(),CLERK_SECRET_KEY:'sk_test_unit',CLERK_JWT_KEY:publicKey.export({type:'spki',format:'pem'}),ADMIN_USER_IDS:'user_owner'};
+ const token=(sub,overrides={})=>{
+  const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
+  const issued=Math.floor(Date.now()/1000);
+  const data=encode({alg:'RS256',typ:'JWT',kid:'unit-test'})+'.'+encode({sub,iss:'https://clerk.example',sid:'sess_unit',iat:issued,nbf:issued-10,exp:issued+300,azp:'http://localhost',...overrides});
+  return data+'.'+sign('RSA-SHA256',Buffer.from(data),privateKey).toString('base64url');
+ };
+ const owner=token('user_owner'),customer=token('user_customer',{admin:true});
+ const ownSession=await request(env,'/api/session',{headers:{Authorization:'Bearer '+owner}});
+ assert.equal(ownSession.status,200);assert.equal((await ownSession.json()).admin,true);
+ assert.equal((await request(env,'/api/admin/overview',{headers:{Authorization:'Bearer '+owner}})).status,200);
+ const customerSession=await(await request(env,'/api/session',{headers:{Authorization:'Bearer '+customer}})).json();
+ assert.equal(customerSession.guest,false);assert.equal(customerSession.admin,false,'editable token claims never grant administration');
+ assert.equal((await request(env,'/api/admin/overview',{headers:{Authorization:'Bearer '+customer}})).status,403);
+ assert.equal((await request(env,'/dashboard',{headers:{Cookie:'__session='+owner}})).status,200);
+ assert.equal((await request(env,'/dashboard',{headers:{Cookie:'__session='+customer}})).status,302);
+ assert.equal((await request(env,'/api/admin/overview',{headers:{Cookie:'__session='+owner}})).status,403,'API never accepts a session cookie as bearer authorization');
+ for(const invalid of [token('user_owner',{exp:Math.floor(Date.now()/1000)-120}),token('user_owner',{azp:'https://foreign.example'})]){
+  assert.equal((await request(env,'/api/admin/overview',{headers:{Authorization:'Bearer '+invalid}})).status,401);
+  assert.equal((await request(env,'/dashboard',{headers:{Cookie:'__session='+invalid}})).status,302);
+ }
+});

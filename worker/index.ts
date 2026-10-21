@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { bookingInput, calculateQuote, validTransition } from './domain';
 import { sampleVehicles, sampleServices } from '../src/data';
 import assets from './assets.generated.json';
+import {isAdminPath, viewPaths} from '../src/lib/routes';
 type Env={DB:D1Database;CACHE?:KVNamespace;ASSETS?:Fetcher;PUBLIC_API_LIMITER?:RateLimit;[key:string]:any};
 class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -10,9 +11,9 @@ async function stableId(value:string){const bytes=new Uint8Array(await crypto.su
 const now=()=>new Date().toISOString();
 const id=()=>crypto.randomUUID();
 const sameSecret=(a:string,b:string)=>{const aa=new TextEncoder().encode(a),bb=new TextEncoder().encode(b);let diff=aa.length^bb.length;for(let i=0;i<Math.max(aa.length,bb.length);i++)diff|=(aa[i]||0)^(bb[i]||0);return diff===0;};
-async function identity(req:Request,env:Env){
- const bearer=req.headers.get('authorization')?.replace(/^Bearer /,'');
- if(bearer&&env.CLERK_SECRET_KEY){try{const token=await verifyToken(bearer,{secretKey:env.CLERK_SECRET_KEY,authorizedParties:[new URL(req.url).origin,...(env.APP_ORIGIN?[env.APP_ORIGIN]:[])]});return {userId:token.sub,admin:(env.ADMIN_USER_IDS||'').split(',').map((s:string)=>s.trim()).includes(token.sub),guest:false};}catch{throw new HttpError(401,'Tu sesión venció. Inicia sesión de nuevo.');}}
+async function identity(req:Request,env:Env,allowSessionCookie=false){
+ const bearer=req.headers.get('authorization')?.replace(/^Bearer /,'')||(allowSessionCookie?req.headers.get('cookie')?.match(/(?:^|;\s*)__session=([A-Za-z0-9_.-]+)(?:;|$)/)?.[1]:undefined);
+ if(bearer&&env.CLERK_SECRET_KEY){try{const token=await verifyToken(bearer,{secretKey:env.CLERK_SECRET_KEY,jwtKey:env.CLERK_JWT_KEY,authorizedParties:[new URL(req.url).origin,...(env.APP_ORIGIN?[env.APP_ORIGIN]:[])]});return {userId:token.sub,admin:(env.ADMIN_USER_IDS||'').split(',').map((s:string)=>s.trim()).includes(token.sub),guest:false};}catch{throw new HttpError(401,'Tu sesión venció. Inicia sesión de nuevo.');}}
  const local=['localhost','127.0.0.1','[::1]'].includes(new URL(req.url).hostname)&&env.LOCAL_ADMIN==='true';
  const cookie=req.headers.get('cookie')?.match(/(?:^|; )dl_guest=([a-f0-9-]{36})(?:;|$)/)?.[1];
  return {userId:cookie?'guest_'+cookie:'',admin:local,guest:true};
@@ -128,4 +129,9 @@ async function api(req:Request,env:Env){const url=new URL(req.url),path=url.path
  throw new HttpError(404,'Recurso no encontrado.');
 }
 const mime:Record<string,string>={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',svg:'image/svg+xml',png:'image/png',ico:'image/x-icon',woff2:'font/woff2'};
-export default {async fetch(req:Request,env:Env){try{let r:Response;if(new URL(req.url).pathname.startsWith('/api/'))r=await api(req,env);else{const path=new URL(req.url).pathname;const key=path==='/'?'/index.html':path;const encoded=(assets as Record<string,string>)[key];if(encoded){const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));r=new Response(bytes,{headers:{'Content-Type':mime[key.split('.').pop()||'']||'application/octet-stream','Cache-Control':key.includes('/_astro/')?'public,max-age=31536000,immutable':'no-cache'}});}else r=new Response('Página no encontrada',{status:404});}r.headers.set('X-Content-Type-Options','nosniff');r.headers.set('Referrer-Policy','strict-origin-when-cross-origin');r.headers.set('X-Frame-Options','SAMEORIGIN');r.headers.set('Permissions-Policy','camera=(), geolocation=(), microphone=(self)');return r;}catch(e:any){if(e instanceof z.ZodError)return json({error:'Revisa los campos del formulario.',details:e.issues.map((i:any)=>({field:i.path.join('.'),message:i.message}))},400);if(e instanceof HttpError)return json({error:e.message},e.status);if(e instanceof Error&&/Selecciona|fecha|máximo|vehículo|servicio/.test(e.message))return json({error:e.message},400);console.error('request_failed',e?.message);return json({error:'No pudimos completar la operación. Inténtalo de nuevo.'},500);}}};
+export default {async fetch(req:Request,env:Env){try{let r:Response;if(new URL(req.url).pathname.startsWith('/api/'))r=await api(req,env);else{const url=new URL(req.url),path=url.pathname.replace(/\/$/,'')||'/';
+ if(isAdminPath(path)){
+  let allowed=false;try{allowed=(await identity(req,env,true)).admin;}catch{}
+  if(!allowed){const login=new URL('/acceso',url.origin);login.searchParams.set('next',path);return new Response(null,{status:302,headers:{Location:login.toString(),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}
+ }
+ const key=Object.values(viewPaths).includes(path)||isAdminPath(path)?'/index.html':path;const encoded=(assets as Record<string,string>)[key];if(encoded){const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));r=new Response(bytes,{headers:{'Content-Type':mime[key.split('.').pop()||'']||'application/octet-stream','Cache-Control':key.includes('/_astro/')?'public,max-age=31536000,immutable':'no-cache'}});}else r=new Response('Página no encontrada',{status:404});}r.headers.set('X-Content-Type-Options','nosniff');r.headers.set('Referrer-Policy','strict-origin-when-cross-origin');r.headers.set('X-Frame-Options','SAMEORIGIN');r.headers.set('Permissions-Policy','camera=(), geolocation=(), microphone=(self)');return r;}catch(e:any){if(e instanceof z.ZodError)return json({error:'Revisa los campos del formulario.',details:e.issues.map((i:any)=>({field:i.path.join('.'),message:i.message}))},400);if(e instanceof HttpError)return json({error:e.message},e.status);if(e instanceof Error&&/Selecciona|fecha|máximo|vehículo|servicio/.test(e.message))return json({error:e.message},400);console.error('request_failed',e?.message);return json({error:'No pudimos completar la operación. Inténtalo de nuevo.'},500);}}};

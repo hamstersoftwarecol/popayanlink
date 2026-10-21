@@ -2,9 +2,11 @@ import React,{useEffect,useState,useRef} from 'react';
 import {LayoutDashboard,Car,CalendarDays,Wrench,ShoppingBag,Users,AudioLines,MessageSquare,Wallet,Settings,ChevronDown,ChevronRight,ArrowUpRight,ArrowRight,Plus,Search,Bell,PanelLeft,ExternalLink,HelpCircle,Download,ArrowDownLeft,Check,Clock,MoreHorizontal,X,SlidersHorizontal,Phone,Mic,Play,Pause,CheckCircle2,ArrowLeft,Upload,Mail,ShieldCheck,MapPin,Fuel,Gauge,UserRound,Link,LogOut,LoaderCircle,FileText,CircleDot,TriangleAlert} from 'lucide-react';
 import Papa from 'papaparse';
 import {loadClerkClient} from '../lib/clerk-client';
+import PublicSite from './PublicSite';
+import {isAdminView, resolveView, safeReturnPath, viewPaths} from '../lib/routes';
 import {sampleVehicles,sampleServices,demoBookings,money,type Vehicle} from '../data';
 type Booking=Record<string,any>;
-const labels:Record<string,string>={dashboard:'Resumen general',rentals:'Alquiler de vehículos',repairs:'Taller y mantenimiento',sales:'Venta de vehículos',bookings:'Reservas',customers:'Clientes',agents:'Agentes de IA',messages:'Mensajes',finances:'Pagos y facturas',settings:'Configuración',website:'Encuentra tu próximo camino',portal:'Mi portal'};
+const labels:Record<string,string>={landing:'Inicio',workshop:'Taller',marketplace:'Autos en venta',signin:'Acceso privado',dashboard:'Resumen general',rentals:'Alquiler de vehículos',repairs:'Taller y mantenimiento',sales:'Venta de vehículos',bookings:'Reservas',customers:'Clientes',agents:'Agentes de IA',messages:'Mensajes',finances:'Pagos y facturas',settings:'Configuración',website:'Encuentra tu próximo camino',portal:'Mi portal'};
 const kindLabel:Record<string,string>={rental:'Alquiler',repair:'Taller',sale:'Compra',test_drive:'Prueba de manejo'};
 const stateLabel:Record<string,string>={pending:'Pendiente',confirmed:'Confirmada',in_progress:'En curso',completed:'Completada',cancelled:'Cancelada',available:'Disponible',maintenance:'En taller',sold:'Vendido'};
 const initials=(name:string)=>name.split(' ').slice(0,2).map(s=>s[0]).join('');
@@ -12,21 +14,21 @@ const date=(d:string,short=false)=>new Intl.DateTimeFormat('es-CO',{day:'numeric
 const isoLocal=(d:Date)=>new Date(+d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
 function csvDownload(name:string,rows:any[]){const blob=new Blob(['\ufeff'+Papa.unparse(rows.map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v]))))],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 export default function App(){
- const [view,setView]=useState('dashboard'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[session,setSession]=useState<any>(null),[vehicles,setVehicles]=useState<Vehicle[]>(sampleVehicles),[services,setServices]=useState<any[]>(sampleServices),[settings,setSettings]=useState<any>({rental:true,repair:true,sale:true}),[bookings,setBookings]=useState<Booking[]>([]),[adminData,setAdminData]=useState<any>({leads:[],messages:[]}),[isSample,setIsSample]=useState(true),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
+ const [view,setView]=useState('landing'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[session,setSession]=useState<any>(null),[vehicles,setVehicles]=useState<Vehicle[]>(sampleVehicles),[services,setServices]=useState<any[]>(sampleServices),[settings,setSettings]=useState<any>({rental:true,repair:true,sale:true}),[bookings,setBookings]=useState<Booking[]>([]),[adminData,setAdminData]=useState<any>({leads:[],messages:[]}),[isSample,setIsSample]=useState(true),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
  const [modal,setModal]=useState<any>(null),[toast,setToast]=useState(''),[notices,setNotices]=useState(false),[period,setPeriod]=useState('month'),[category,setCategory]=useState('Todos'),[statusFilter,setStatusFilter]=useState('Todos'),[busy,setBusy]=useState(false),[callActive,setCallActive]=useState(false),[callStatus,setCallStatus]=useState(''),[bookingTab,setBookingTab]=useState('Todos');
  const clerk=useRef<any>(null),vapi=useRef<any>(null),fileInput=useRef<HTMLInputElement>(null),userButton=useRef<HTMLDivElement>(null),refreshVersion=useRef(0);
- const [authUser,setAuthUser]=useState<any>(null),[authReady,setAuthReady]=useState(false),[authError,setAuthError]=useState('');
+ const [authUser,setAuthUser]=useState<any>(null),[authReady,setAuthReady]=useState(false),[authError,setAuthError]=useState(''),[accessChecked,setAccessChecked]=useState(false);
  const notify=(msg:string)=>setToast(msg);
- async function api(path:string,options:RequestInit={}){const token=await clerk.current?.session?.getToken();const r=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...options.headers}});const d:any=await r.json();if(!r.ok)throw new Error(d.error||'No se pudo completar la operación.');return d;}
+ async function api(path:string,options:RequestInit={}){const token=await clerk.current?.session?.getToken();const r=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...options.headers}});const d:any=await r.json();if(!r.ok){if(r.status===401){setSession((old:any)=>old?{...old,admin:false,guest:true}:old);setBookings([]);setAdminData({leads:[],messages:[]});setModal(null);}throw new Error(d.error||'No se pudo completar la operación.');}return d;}
  async function refresh(){const version=++refreshVersion.current;try{
  const s=await api('/api/session');if(version!==refreshVersion.current)return;setSession(s);
  const c=await api('/api/catalog');const b=await api('/api/bookings');
  const a=s.admin?await api('/api/admin/overview'):{leads:[],messages:[]};
  if(version!==refreshVersion.current)return;
  setVehicles(s.admin&&a.vehicles?.length?a.vehicles:c.vehicles);setServices(c.services);setSettings({rental:true,repair:true,sale:true,...c.settings});setIsSample(c.sample);setBookings(s.admin?a.bookings:b);setAdminData(a);setLoadError('');
- }catch(e:any){if(version===refreshVersion.current)setLoadError(e.message);}finally{if(version===refreshVersion.current)setLoading(false);}}
+ }catch(e:any){if(version===refreshVersion.current)setLoadError(e.message);}finally{if(version===refreshVersion.current){setLoading(false);setAccessChecked(true);}}}
 
- useEffect(()=>{const h=()=>{const route=location.hash.slice(1)||'dashboard';setView(labels[route]?route:'dashboard');setQuery('');setCategory('Todos');setStatusFilter('Todos');};h();window.addEventListener('hashchange',h);refresh();return()=>window.removeEventListener('hashchange',h);},[]);
+ useEffect(()=>{const h=()=>{setView(resolveView(location.pathname,location.hash));setQuery('');setCategory('Todos');setStatusFilter('Todos');};h();window.addEventListener('hashchange',h);window.addEventListener('popstate',h);refresh();return()=>{window.removeEventListener('hashchange',h);window.removeEventListener('popstate',h);};},[]);
  useEffect(()=>{
  if(!session?.clerkKey)return;let alive=true;let unsubscribe:(()=>void)|undefined;
  setAuthReady(false);setAuthError('');
@@ -35,7 +37,7 @@ export default function App(){
  unsubscribe=c.addListener(({user,session:clerkSession}:any)=>{
   if(!alive)return;setAuthUser(user||null);
   const identity=(user?.id||'guest')+':'+(clerkSession?.id||'');if(identity===previousIdentity)return;previousIdentity=identity;
-  refreshVersion.current++;setBookings([]);setAdminData({leads:[],messages:[]});
+  refreshVersion.current++;setAccessChecked(false);setBookings([]);setAdminData({leads:[],messages:[]});setVehicles([]);setServices([]);setModal(null);setNotices(false);
   setSession((old:any)=>old?{...old,admin:false,guest:!user}:old);
   void refresh();
  });
@@ -46,15 +48,16 @@ export default function App(){
  const node=userButton.current;if(!node||!authReady||!authUser||!clerk.current)return;
  const client=clerk.current;client.mountUserButton(node);
  return()=>client.unmountUserButton(node);
- },[authUser?.id,authReady]);
+ },[authUser?.id,authReady,view,session?.admin,accessChecked]);
 
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),5000);return()=>clearTimeout(t);},[toast]);
  useEffect(()=>{if(!modal)return;const previous=document.activeElement as HTMLElement;const dialog=document.querySelector('.modal') as HTMLElement;dialog?.focus();const handler=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!busy)setModal(null);if(e.key==='Tab'&&dialog){const focusable=Array.from(dialog.querySelectorAll('button:not(:disabled), a[href], input, select, textarea')).filter(el=>(el as HTMLElement).offsetParent!==null) as HTMLElement[];const first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===dialog)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};window.addEventListener('keydown',handler);const old=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{window.removeEventListener('keydown',handler);document.body.style.overflow=old;previous?.focus();};},[modal,busy]);
- function go(v:string){location.hash=v;setMobile(false);setNotices(false);}
+ function go(v:string,replace=false){const path=viewPaths[v]||'/';if(replace)history.replaceState(null,'',path);else history.pushState(null,'',path);setView(Object.hasOwn(viewPaths,v)?v:'landing');setQuery('');setCategory('Todos');setStatusFilter('Todos');setMobile(false);setNotices(false);window.scrollTo({top:0,behavior:'instant'});}
  async function openAuth(mode:'signin'|'signup'){
  if(clerk.current&&authReady){
   if(authUser){clerk.current.openUserProfile();return;}
-  const options={forceRedirectUrl:window.location.origin+'/#portal'};
+  const next=isAdminView(view)?viewPaths[view]:view==='signin'?safeReturnPath(new URLSearchParams(location.search).get('next')):'/mi-portal';
+  const options={forceRedirectUrl:window.location.origin+next};
   if(mode==='signup')clerk.current.openSignUp(options);else clerk.current.openSignIn(options);return;
  }
  if(session?.clerkKey){notify(authError||'El acceso se está cargando. Inténtalo en unos segundos.');return;}
@@ -63,6 +66,13 @@ export default function App(){
  async function login(){return openAuth('signin');}
  async function signUp(){return openAuth('signup');}
 
+ const protectedView=isAdminView(view);
+ const authPending=!session||loading||!accessChecked||!!(session.clerkKey&&!authReady&&!authError);
+ const adminAllowed=!!session?.admin&&accessChecked&&!authPending;
+ useEffect(()=>{
+  if(protectedView&&!authPending&&session?.guest&&!session?.admin){history.replaceState(null,'','/acceso?next='+encodeURIComponent(viewPaths[view]));setView('signin');setModal(null);}
+  if(view==='signin'&&!authPending&&session&&!session.guest){go(resolveView(safeReturnPath(new URLSearchParams(location.search).get('next'))),true);}
+ },[view,authPending,session?.guest,session?.admin]);
  const preview=!session?.admin;
  const displayBookings=preview&&view!=='portal'?demoBookings:bookings;
  const filteredBookings=displayBookings.filter(b=>(bookingTab==='Todos'||b.kind===bookingTab)&&(statusFilter==='Todos'||b.status===statusFilter)&&(`${b.name} ${b.reference} ${b.vehicle_name||''}`.toLowerCase().includes(query.toLowerCase())));
@@ -72,10 +82,12 @@ export default function App(){
  async function startCall(agent='receptionist'){if(callActive){vapi.current?.stop();return;}if(!session?.vapiKey||!session.vapiAssistants[agent]){setModal({type:'info',title:'Tu recepcionista está por llegar',text:'Conecta la clave pública de Vapi, el ID del agente y el secreto del webhook para realizar llamadas reales. Puedes solicitar una devolución de llamada desde el sitio web.',link:'https://docs.vapi.ai/quickstart/web'});return;}try{setCallStatus('Conectando…');const {default:Vapi}=await import('@vapi-ai/web');const client=new Vapi(session.vapiKey);vapi.current=client;client.on('call-start',()=>{setCallActive(true);setCallStatus('Llamada en curso');});client.on('call-end',()=>{setCallActive(false);setCallStatus('Llamada finalizada');});client.on('error',()=>{setCallActive(false);setCallStatus('No se pudo conectar. Comprueba el permiso del micrófono.');});await client.start(session.vapiAssistants[agent]);}catch{setCallStatus('No se pudo iniciar la llamada. Revisa tu micrófono.');}}
  const periodBookings=bookings.filter(b=>period==='all'||(period==='week'?Date.now()-+new Date(b.created_at||b.start_at)<=7*86400000:new Date(b.created_at||b.start_at).toISOString().slice(0,7)===new Date().toISOString().slice(0,7)));const totalPaid=periodBookings.filter(b=>b.payment_status==='paid').reduce((n,b)=>n+b.amount,0);
  const available=vehicles.filter(v=>v.status==='available').length;
- return <div className="app-shell">
+ const publicView=<PublicSite view={view} vehicles={vehicles} services={services} sample={isSample} settings={settings} session={session} user={authUser} authReady={authReady} authError={authError} loadError={loadError} gate={protectedView?(authPending?'loading':session?.guest?'signin':'forbidden'):undefined} onNavigate={go} onAuth={openAuth} onModal={setModal} onRetry={()=>window.location.reload()} userButton={<div className="auth-user-button" ref={userButton} aria-label="Menú de mi cuenta"/>} portalContent={<><BookingTable bookings={bookings} onSelect={b=>setModal({type:'detail',booking:b})}/><div className="public-portal-actions"><button className="public-btn public-btn-orange" onClick={()=>setModal({type:'booking',kind:'rental'})}>Nueva reserva <Plus size={17}/></button>{!authUser&&<button className="public-btn public-btn-outline" onClick={login}>Iniciar sesión</button>}</div></>}/>;
+ return <>
+  {protectedView&&adminAllowed?<div className="app-shell">
   {mobile&&<button className="sidebar-scrim" aria-label="Cerrar menú" onClick={()=>setMobile(false)}/>}
   <aside className={'sidebar '+(mobile?'open':'')}>
-   <a className="brand" href="#dashboard"><span className="brand-symbol">d<span/></span>drivelink<span className="brand-period">.</span></a>
+   <a className="brand" href="/dashboard" onClick={e=>{e.preventDefault();go('dashboard');}}><span className="brand-symbol">d<span/></span>drivelink<span className="brand-period">.</span></a>
    <button className="workspace" onClick={()=>setModal({type:'info',title:'Drivelink Motors',text:'Tu espacio de trabajo para gestionar la flota, el taller y la atención al cliente. Esta instalación corresponde a un negocio. Configura las integraciones desde Configuración.'})}><span className="workspace-logo"><Car size={20}/></span><span><b>Drivelink Motors</b><small>Espacio de trabajo</small></span><ChevronDown size={14}/></button>
    <div className="nav-label">Principal</div><nav>
     {[['dashboard','Resumen general',LayoutDashboard],['bookings','Reservas',CalendarDays],['rentals','Vehículos',Car],['repairs','Taller y servicios',Wrench],['sales','Venta de autos',ShoppingBag],['customers','Clientes',Users]].map(([id,label,Icon]:any)=><button key={id} className={'nav-item '+(view===id?'active':'')} onClick={()=>go(id)}><Icon size={18}/><span>{label}</span>{id==='bookings'&&<i>{preview?12:bookings.filter(b=>b.status==='pending').length}</i>}</button>)}
@@ -125,6 +137,7 @@ export default function App(){
     <footer className="page-footer"><span><span className="footer-logo">d</span> Tu negocio, en la mejor dirección.</span><span>Drivelink © {new Date().getFullYear()} <span className="footer-sep">|</span> <button onClick={()=>setModal({type:'help'})}>Ayuda y soporte</button></span></footer>
    </main>
   </div>
+ </div>:publicView}
   <input type="file" accept=".csv,text/csv" ref={fileInput} hidden onChange={importCSV}/>
   {toast&&<div role="status" className="toast"><CheckCircle2 size={18}/><span>{toast}</span><button aria-label="Cerrar aviso" onClick={()=>setToast('')}><X size={16}/></button></div>}
   {loading&&<div className="loading-strip" aria-label="Cargando"/>}
@@ -139,7 +152,7 @@ export default function App(){
    {modal.type==='import'&&<><h2 id="modal-title">Importar vehículos</h2><p>{modal.file} · {modal.rows.length} filas. La importación se valida y se guarda como una sola operación.</p><pre className="csv-preview">{JSON.stringify(modal.rows.slice(0,2),null,2)}</pre><button className="btn btn-primary" disabled={busy} onClick={async()=>{setBusy(true);try{const result=await api('/api/admin/vehicles',{method:'POST',body:JSON.stringify(modal.rows)});notify(`${result.imported} vehículos importados.`);await refresh();setModal(null);}catch(e:any){notify(e.message);}finally{setBusy(false);}}}>{busy?<LoaderCircle size={16} className="spin"/>:<Upload size={16}/>}Confirmar importación</button></>}
    {modal.type==='callback'&&<LeadForm api={api} onSuccess={()=>{notify('Solicitud de llamada recibida.');setModal(null);}}/>}{modal.type==='service'&&<ServiceForm api={api} onSuccess={async()=>{await refresh();notify('Servicio añadido.');setModal(null);}}/>}{modal.type==='availability'&&<AvailabilityForm api={api} onResults={(data:any)=>{setVehicles(data.vehicles);setModal(null);notify(`${data.vehicles.length} vehículos sin reservas en las fechas seleccionadas.`);}}/>}
   </div></div>}
- </div>;
+ </>;
 }
 function Empty({icon:Icon,text}:{icon:any;text:string}){return <div className="empty"><Icon size={29}/><p>{text}</p></div>;}
 function VehicleCard({v,sale=false,onClick}:{v:Vehicle;sale?:boolean;onClick:()=>void}){return <button className="vehicle-card" onClick={onClick}><div className="vehicle-image"><img src={v.image} alt={v.name} loading="lazy"/><span className={'vehicle-status '+(v.status==='available'?'available':'maintenance')}><span/>{stateLabel[v.status]}</span><span className="vehicle-year">{v.year}</span></div><div className="vehicle-card-body"><span className="vehicle-category">{v.category}</span><h3>{v.name}</h3><div className="vehicle-specs"><span><Users size={13}/>{v.seats} plazas</span><span><Gauge size={13}/>{v.transmission}</span><span><Fuel size={13}/>{v.fuel}</span></div><div className="vehicle-card-footer"><span><b>{money(sale?v.sale_price||0:v.daily_rate)}</b><small>{sale?'':' / día'}</small></span><span className="vehicle-arrow"><ArrowUpRight size={17}/></span></div></div></button>;}

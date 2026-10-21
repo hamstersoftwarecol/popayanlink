@@ -8,6 +8,14 @@ URL pública en la cuenta del propietario: https://drivelink.business-alejandrol
 
 Worker, D1 y KV publicados. Configuración y comandos: [DESPLIEGUE_CLOUDFLARE.md](./DESPLIEGUE_CLOUDFLARE.md). La copia de Sites conserva acceso privado y usa una D1 independiente.
 
+## Navegación pública y administración
+
+La raíz `/` muestra la landing para clientes. El catálogo está en `/catalogo`, el taller en `/taller`, los autos en venta en `/ventas` y las reservas del cliente o invitado en `/mi-portal`. La navegación pública no incluye el menú del administrador.
+
+El panel está en `/dashboard` y sus secciones bajo `/dashboard/`. Al abrir estas direcciones sin autorización, el Worker redirige a `/acceso` y conserva una dirección de retorno interna. Para las páginas comprueba el JWT de Clerk en `__session`; las APIs siguen exigiendo Bearer. La interfaz espera la verificación de sesión y del permiso `ADMIN_USER_IDS` antes de montar el panel. Una cuenta de cliente no obtiene acceso administrativo al registrarse. Los enlaces antiguos como `/#dashboard` tienen la misma protección en el cliente; los fragmentos no se envían al servidor.
+
+La raíz se genera con contenido público, sin informes, nombres de clientes ni menú administrativo. La autenticación conserva la instancia de prueba elegida por el propietario.
+
 ## Estado de la entrega
 
 Es una base funcional desplegable, con datos persistentes y APIs verificadas. Sin credenciales, el panel muestra una **vista de ejemplo**, el catálogo es ilustrativo y las solicitudes de invitado se guardan como pendientes. No se simulan llamadas, mensajes enviados ni cobros. Las operaciones administrativas están bloqueadas por defecto.
@@ -40,7 +48,7 @@ Opcional: `npm run seed:local` carga seis vehículos y cuatro servicios ilustrat
 
 ## Verificación
 
-Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 15 pruebas, las cinco regresiones corregidas y el límite de solicitudes del despliegue público.
+Informe actualizado: [VERIFICACION.md](./VERIFICACION.md). La suite incluye 20 pruebas, las cinco regresiones corregidas y el límite de solicitudes del despliegue público.
 
 ```sh
 npm run check
@@ -77,6 +85,7 @@ Configura los valores de `.env.example` en el entorno del Worker:
 - `CLERK_SECRET_KEY`: secreto del backend.
 - `ADMIN_USER_IDS`: IDs de usuario de Clerk separados por coma, sin asignaciones a partir de datos editables por el usuario.
 - `APP_ORIGIN`: origen exacto de tu despliegue.
+- `CLERK_JWT_KEY`: clave pública PEM opcional para verificar JWT sin consultar JWKS; nunca contiene una clave privada.
 - `DEMO_CATALOG=false`: no ofrecer inventario ilustrativo en una base vacía.
 
 El cliente envía un token de sesión Bearer; el servidor verifica firma y origen autorizado. Cada recurso administrativo comprueba permisos. Los clientes solo ven/cancelan sus reservas. Sin Clerk, una cookie de invitado aleatoria, HttpOnly, SameSite y Secure en HTTPS mantiene las reservas en ese navegador. Una reserva de invitado no se transfiere automáticamente al iniciar sesión: implementa verificación de propiedad antes de migrarla a una cuenta permanente.
