@@ -37,17 +37,34 @@ async function availableVehicles(env:Env,vehicles:any[],rawStart:unknown,rawEnd:
  return vehicles.filter(v=>v.status==='available'&&!busy.has(v.id));
 }
 async function quote(env:Env,input:any){const c=await catalog(env);const vehicle=c.vehicles.find((v:any)=>v.id===input.vehicleId);const service=c.services.find((s:any)=>s.id===input.serviceId);const flag=input.kind==='test_drive'?'sale':input.kind;if(c.settings[flag]===false)throw new HttpError(409,'Este servicio estará disponible próximamente. Puedes inscribirte para recibir novedades.');if(vehicle&&vehicle.status!=='available')throw new HttpError(409,'El vehículo no está disponible.');if(input.kind==='repair'&&!input.vehicleDetails)throw new HttpError(400,'Indica la marca, modelo y matrícula de tu vehículo.');const q=calculateQuote(input,vehicle,service);if(input.kind==='repair'||input.kind==='test_drive'){const local=new Date(new Date(q.startAt).getTime()-5*3600000);const localEnd=new Date(new Date(q.endAt).getTime()-5*3600000);if(local.getUTCDay()===0||local.getUTCHours()<8||local.getUTCHours()>=18||((localEnd.getUTCDate()!==local.getUTCDate()||localEnd.getUTCHours()>18||(localEnd.getUTCHours()===18&&localEnd.getUTCMinutes()>0))))throw new HttpError(400,'Selecciona un horario de lunes a sábado, de 8:00 a 18:00 (Bogotá).');}return {vehicle,service,q};}
-async function sendWhatsapp(env:Env,to:string,payload:any){
+async function sendWhatsapp(env:Env,dest:string|{to?:string;recipient?:string},payload:any){
  if(!env.KAPSO_API_KEY||!env.KAPSO_PHONE_NUMBER_ID)return null;
- const cleanPhone=to.replace(/[^0-9]/g,'');if(!cleanPhone)return null;
+ const target=typeof dest==='string'?(dest.includes('.')?{recipient:dest}:{to:dest.replace(/[^0-9]/g,'')}):dest;
+ if(!target.to&&!target.recipient)return null;
  return fetch(`https://api.kapso.ai/meta/whatsapp/v24.0/${encodeURIComponent(env.KAPSO_PHONE_NUMBER_ID)}/messages`,{
   method:'POST',
   headers:{'X-API-Key':env.KAPSO_API_KEY,'Content-Type':'application/json'},
-  body:JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to:cleanPhone,...payload})
+  body:JSON.stringify({messaging_product:'whatsapp',...(target.to?{recipient_type:'individual',to:target.to}:{recipient:target.recipient}),...payload})
  });
 }
-async function sendWhatsappTemplate(env:Env,to:string,templateName:string,parameters:string[]){
- return sendWhatsapp(env,to,{type:'template',template:{name:templateName,language:{code:'es'},components:[{type:'body',parameters:parameters.map(text=>({type:'text',text:String(text||'-')}))}]}});
+async function sendWhatsappTemplate(env:Env,dest:string|{to?:string;recipient?:string},templateName:string,parameters:string[]){
+ return sendWhatsapp(env,dest,{type:'template',template:{name:templateName,language:{code:'es'},components:[{type:'body',parameters:parameters.map(text=>({type:'text',text:String(text||'-')}))}]}});
+}
+function whatsappBotReply(text:string):string{
+ const t=(text||'').toLowerCase().trim();
+ if(t==='1'||/alquil|renta|tarifa|disponib|diari/.test(t)){
+  return `🚗 *Alquiler de Vehículos en PopayanLink*\n\nOfrecemos alquiler con o sin conductor en Popayán. Todos los vehículos cuentan con seguro y kilometraje garantizado.\n\n👉 Consulta autos y cotiza en línea:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/catalogo\n\n¿Para qué fechas o qué tipo de auto buscas?`;
+ }
+ if(t==='2'||/taller|manten|mec[aá]nic|freno|aceite|cita|repara|sincroniz/.test(t)){
+  return `🔧 *Taller y Mantenimiento PopayanLink*\n\nServicios mecánicos especializados:\n• Diagnóstico computarizado\n• Cambio de aceite y filtros\n• Frenos y suspensión\n• Sincronización\n\n⏰ Lunes a sábado de 8:00 a 18:00 (Bogotá).\n👉 Agenda tu cita aquí:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/taller\n\nO escribe la marca, modelo y placa de tu auto para coordinar.`;
+ }
+ if(t==='3'||/venta|compra|precio|comprar|vender|usado|seminuevo/.test(t)){
+  return `🚘 *Compra y Venta de Autos PopayanLink*\n\nVehículos seleccionados con peritaje certificado y documentación al día.\n\n👉 Conoce los autos disponibles y solicita prueba de manejo:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/ventas\n\n¿Te interesa algún modelo en particular?`;
+ }
+ if(t==='4'||/asesor|human|hablar|llam|contact|persona/.test(t)){
+  return `👤 *Atención Personalizada*\n\nUno de nuestros asesores en Popayán revisará tu mensaje y te contactará a la brevedad.\n\n🎙️ También puedes hablar de inmediato con nuestros agentes de voz con IA en:\nhttps://drivelink.business-alejandrolopezmurillo.workers.dev/`;
+ }
+ return `¡Hola! Bienvenido a *PopayanLink* 🚗🔧\nTu plataforma en Popayán para alquiler, taller y venta de vehículos.\n\n¿En qué podemos ayudarte hoy?\n\n1️⃣ *Alquiler de vehículos*\n2️⃣ *Taller y citas mecánicas*\n3️⃣ *Autos en venta*\n4️⃣ *Hablar con un asesor*\n\n👉 Responde con el número (1, 2, 3 o 4) o cuéntanos qué necesitas.`;
 }
 async function createBooking(env:Env,input:any,userId:string){
  const prior=await env.DB.prepare('SELECT * FROM bookings WHERE idempotency_key=? AND user_id=?').bind(input.idempotencyKey,userId).first();if(prior)return prior;
@@ -90,8 +107,22 @@ async function webhook(req:Request,env:Env,path:string){
   if(req.headers.get('X-Webhook-Event')==='whatsapp.message.received'||payload.type==='whatsapp.message.received'){
    for(const entry of entries.slice(0,100)){const m=entry.message;if(!m?.id||m.kapso?.passive)continue;
     const phone=String(entry.conversation?.phone_number||m.from||'');
+    const bsuid=String(m.from_user_id||entry.conversation?.business_scoped_user_id||'');
+    const dest=phone?phone:(bsuid||'');
+    const bodyText=String(m.text?.body||m.kapso?.content||'[Multimedia]').slice(0,10000);
     const booking:any=phone?await env.DB.prepare("SELECT user_id FROM bookings WHERE REPLACE(REPLACE(REPLACE(phone,'+',''),' ',''),'-','')=? ORDER BY created_at DESC LIMIT 1").bind(phone.replace(/[^0-9]/g,'')).first():null;
-    await env.DB.prepare('INSERT OR IGNORE INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),booking?.user_id||'whatsapp_'+String(entry.conversation?.id||m.from_user_id||phone),String(m.text?.body||m.kapso?.content||'[Multimedia]').slice(0,10000),'inbound','whatsapp',m.id,now()).run();
+    const userId=booking?.user_id||(bsuid?'whatsapp_'+bsuid:(phone?'whatsapp_'+phone:'whatsapp_'+m.id));
+    await env.DB.prepare('INSERT OR IGNORE INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),userId,bodyText,'inbound','whatsapp',m.id,now()).run();
+    if(dest&&bodyText!=='[Multimedia]'){
+     const reply=whatsappBotReply(bodyText);
+     try{
+      const r=await sendWhatsapp(env,dest,{type:'text',text:{body:reply}});
+      if(r&&r.ok){
+       const sent:any=await r.json().catch(()=>({}));
+       await env.DB.prepare('INSERT INTO messages (id,user_id,body,direction,channel,external_id,created_at) VALUES (?,?,?,?,?,?,?)').bind(id(),userId,reply,'outbound','whatsapp',sent.messages?.[0]?.id||null,now()).run();
+      }
+     }catch(err){console.error('whatsapp auto-reply error',err);}
+    }
    }
   }return json({ok:true});
  }
